@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dist-electron/
+dist-desktop/
+dist-server/
+release/
+*.log
+.DS_Store
+.appium/
+logs/
+resources/jre/*
+!resources/jre/.gitkeep
+
+.idea/
+.qoder/
+/*.png

@@ -1,0 +1,50 @@
+version: 1
+name: 登录流程
+platform: android
+replay:
+  timeout: 10000
+  retries: 2
+  retryDelay: 500
+  settle: true
+  stopOnFailure: true
+  coordinateFallback: false
+  requireApp: true
+capabilities:
+  udid: emulator-5554
+  appPackage: com.example.app
+  appActivity: .MainActivity
+steps:
+  - id: step-login
+    action: tap
+    description: 点击登录
+    note: 登录页首个按钮，失败时检查是否弹了更新提示
+    target:
+      locator:
+        strategy: accessibility id
+        value: 登录
+      coordinate:
+        xRatio: 0.5
+        yRatio: 0.82
+    policy:
+      timeout: 20000
+      retries: 3
+  - id: step-home
+    action: wait
+    description: 等待首页出现
+    condition: visible
+    timeout: 10000
+    target:
+      locator:
+        strategy: id
+        value: com.example.app:id/home
+  - id: step-toast
+    action: wait
+    description: 确认登录成功提示
+    condition: text
+    expect: 登录成功
+    match: contains
+    timeout: 8000
+    target:
+      locator:
+        strategy: xpath
+        value: "//*[@text='登录成功']"
