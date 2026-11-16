@@ -54,7 +54,7 @@ npx electron-builder --mac dmg
 
 不要把 `EchoBench.app` 直接从 DMG 里运行；DMG 是只读卷，依赖安装、Appium 缓存和更新可能异常。请先拖到“应用程序”文件夹再启动。
 
-首次启动时环境体检会检查 JDK、adb、scrcpy、Xcode 等系统工具。安装包只内置 Electron/Node、Appium、驱动和 scrcpy-server；JDK、adb、Xcode 仍需本机或环境面板处理。需要内置 JRE 时用 `./local-package.sh --dist --with-jre`。
+首次启动时环境体检会检查 JDK、adb、scrcpy、Xcode 等系统工具。CI 安装包会内置固定版本的 Android Platform-Tools、Electron/Node、Appium、驱动和 scrcpy-server；JDK 和 Xcode 仍需本机或环境面板处理。需要内置 JRE 时用 `./local-package.sh --dist --with-jre`。本地打包如需同样内置 adb，先执行 `node scripts/prepare-platform-tools.mjs`。
 
 Finder 启动的 Electron 应用不会继承终端完整 PATH，EchoBench 会把 `/opt/homebrew/bin`、`/usr/local/bin` 等常见路径加入子进程环境，便于找到 Homebrew 安装的工具。
 
@@ -69,6 +69,7 @@ EchoBench.app / EchoBench.exe
 ├── dist-desktop/          # Electron 主进程
 ├── node_modules/          # 生产依赖和 Appium 驱动
 ├── resources/
+│   ├── platform-tools/    # 内置 adb（CI 打包）
 │   ├── scrcpy-server
 │   └── jre/               # 可选
 └── userData/
@@ -85,6 +86,7 @@ EchoBench.app / EchoBench.exe
 - 启动后 8 秒检查一次；
 - 进程持续运行时每 24 小时检查一次；
 - 菜单和“检查更新”入口可手动检查；
+- 优先读取 GitHub Releases Atom，避免匿名 API 每小时 60 次的限流；Atom 不可用时才降级到 API；
 - 所有平台发现新版本后都会弹窗显示版本、发布说明和对应平台下载地址；
 - 用户点击“打开下载页”后由浏览器下载安装包并手动安装；
 - 不执行就地更新，不改 `userData`，不执行 npm install，不修改系统工具。

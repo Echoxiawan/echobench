@@ -10,7 +10,7 @@ Operate Android / iOS apps in your browser, record steps, validate locators in r
 
 [English](README.en.md) | [简体中文](README.md)
 
-![Version](https://img.shields.io/badge/version-0.1.0-orange?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.0.0-orange?style=flat-square)
 ![Node.js](https://img.shields.io/badge/Node.js-22.12%2B-339933?style=flat-square&logo=nodedotjs&logoColor=white)
 ![Appium](https://img.shields.io/badge/Appium-3.8.0-662D91?style=flat-square)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)
@@ -92,6 +92,7 @@ On macOS, drag `EchoBench.app` to Applications first; do not run it directly fro
 
 - Full installation (Windows / macOS / Linux): [Installation](docs/en/install.md)
 - Connect a device, record your first flow, add assertions, and replay: [Quick start](docs/en/quickstart.md)
+- From first launch to recording, assertions, replay, and export: [EchoBench user guide](docs/en/user-guide.md)
 - Desktop installers and updates: [GitHub Releases](https://github.com/Echoxiawan/echobench/releases)
 - The first physical iOS connection needs Xcode and WebDriverAgent signing; see the installation guide.
 
@@ -142,6 +143,7 @@ Android video does not use Appium screenshot polling and does not require FFmpeg
 | Document | Contents |
 | --- | --- |
 | [Documentation index](docs/en/README.md) | Entry point for all English docs |
+| [EchoBench user guide](docs/en/user-guide.md) | Beginner-oriented environment checks, recording, assertions, replay, export, and troubleshooting |
 | [Installation](docs/en/install.md) | Windows / macOS / Linux, Android SDK, scrcpy, JDK, Xcode, ports |
 | [Quick start](docs/en/quickstart.md) | Connect a device, record, assert, replay, draft, and stop |
 | [YAML format](docs/en/yaml.md) | Actions, assertions, replay policy, candidate structure |
@@ -182,15 +184,20 @@ CI runs `npm run typecheck`, `npm test`, and `npm run desktop:build`. Run the sa
 
 <table>
 <tr>
-<td align="center" width="50%">
+<td align="center" width="33%">
 <img src="docs/contact/wechat-personal.png" alt="Author's WeChat QR code" width="260"><br>
 <b>Author's WeChat</b><br>
 <sub>Please mention EchoBench when adding</sub>
 </td>
-<td align="center" width="50%">
+<td align="center" width="33%">
 <img src="docs/contact/wechat-official.png" alt="WeChat Official Account QR code" width="260"><br>
 <b>WeChat Official Account</b><br>
 <sub>Follow for project updates and articles</sub>
+</td>
+<td align="center" width="33%">
+<a href="https://x.com/AiYouyisi"><img src="https://img.shields.io/badge/X-%40AiYouyisi-black?style=flat-square&logo=x&logoColor=white" alt="X (Twitter) @AiYouyisi"></a><br>
+<b>X (Twitter)</b><br>
+<sub>Follow for project news</sub>
 </td>
 </tr>
 </table>

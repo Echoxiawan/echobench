@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>EchoBench Installation & Connection Help</title>
+  <style>
+    :root { --bg:#0d0f0d; --panel:#151814; --raised:#1c211a; --line:#30372d; --text:#e9eee5; --muted:#8d9788; --lime:#b8f34a; --amber:#e4ae61; --red:#ff7d69; --mono:"SFMono-Regular","Cascadia Mono","Roboto Mono",monospace; --condensed:"Avenir Next Condensed","DIN Condensed",sans-serif; color-scheme:dark; }
+    * { box-sizing:border-box; } html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--text); background:radial-gradient(circle at 78% 0%,#26301f 0,transparent 34%),linear-gradient(90deg,#0b0d0b,var(--bg) 28%,#10130f); font-family:"Avenir Next","Segoe UI",sans-serif; line-height:1.7; }
+    a { color:var(--lime); text-decoration:none; } a:hover { text-decoration:underline; } code,pre { font-family:var(--mono); }
+    .shell { min-height:100vh; display:grid; grid-template-columns:260px minmax(0,1fr); }
+    aside { position:sticky; top:0; height:100vh; padding:28px 20px; border-right:1px solid var(--line); background:#0b0e0be8; backdrop-filter:blur(16px); overflow-y:auto; }
+    .brand { display:grid; gap:6px; margin-bottom:28px; } .brand-mark { width:42px; height:42px; display:grid; place-items:center; color:#0b0e08; background:var(--lime); clip-path:polygon(0 0,100% 0,100% 72%,72% 100%,0 100%); font:900 21px var(--condensed); }
+    .brand b { font:800 18px var(--condensed); letter-spacing:2px; } .brand span { color:var(--muted); font:500 9px var(--mono); letter-spacing:1.7px; }
+    nav { display:grid; gap:4px; } nav a { padding:8px 9px; border-left:2px solid transparent; color:var(--muted); font-size:12px; }
+    nav a:hover { border-color:var(--lime); background:var(--raised); color:var(--text); text-decoration:none; }
+    main { width:min(1120px,100%); padding:44px 48px 90px; } .hero { display:grid; gap:14px; margin-bottom:34px; }
+    .eyebrow { color:var(--lime); font:600 10px var(--mono); letter-spacing:2px; } h1 { margin:0; font:800 clamp(30px,4vw,54px)/1 var(--condensed); }
+    .hero p { max-width:760px; margin:0; color:#aab5a0; font-size:13px; }
+    .os-switch { display:flex; flex-wrap:wrap; gap:7px; margin-top:6px; }
+    .os-switch button,.language-link { min-height:35px; padding:0 14px; display:inline-flex; align-items:center; border:1px solid var(--line); color:var(--muted); background:var(--panel); font:600 10px var(--mono); cursor:pointer; }
+    .os-switch button.active { border-color:var(--lime); background:var(--lime); color:#0c1008; } .language-link:hover { border-color:var(--lime); color:var(--text); text-decoration:none; }
+    .callout { display:grid; grid-template-columns:4px 1fr; gap:14px; margin:18px 0; padding:14px 16px; border:1px solid var(--line); background:var(--panel); }
+    .callout::before { content:""; background:var(--lime); } .callout.warn::before { background:var(--amber); } .callout p { margin:0; color:var(--muted); font-size:11px; }
+    section.block { scroll-margin-top:26px; margin-top:34px; } section.block h2 { display:flex; align-items:center; gap:12px; margin:0 0 14px; font:700 22px var(--condensed); }
+    section.block h2::before { content:""; width:18px; height:2px; background:var(--lime); } section.block>p { margin:0 0 14px; color:var(--muted); font-size:12px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .card { padding:16px; border:1px solid var(--line); background:linear-gradient(145deg,#171b15,#121510); } .card h3 { margin:0 0 7px; font-size:13px; } .card p { margin:0 0 10px; color:var(--muted); font-size:11px; }
+    .card ul,.steps { margin:0; padding-left:18px; color:#b0baa7; font-size:11px; } .card li,.steps li { margin:5px 0; }
+    .meta { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; } .chip { padding:2px 6px; border:1px solid #46513f; color:#aab7a1; font:500 8px var(--mono); } .chip.required { color:#ffd3ca; border-color:#724c43; } .chip.bundled { color:var(--lime); border-color:#4f682e; }
+    .cmd { position:relative; margin:9px 0; padding:10px 38px 10px 11px; overflow-x:auto; border:1px solid #2d342a; background:#090b08; color:#c9d5bf; font:400 10px/1.6 var(--mono); white-space:pre; }
+    .cmd button { position:absolute; top:6px; right:6px; border:1px solid #394134; background:#171b15; color:var(--muted); cursor:pointer; font:500 8px var(--mono); }
+    .os-panel { display:none; } .os-panel.active { display:block; } table { width:100%; border-collapse:collapse; font-size:11px; } th,td { padding:9px 10px; border:1px solid var(--line); text-align:left; vertical-align:top; } th { color:#bcc8b3; background:#171b15; } td { color:var(--muted); }
+    .error-map { display:grid; gap:8px; } .error-map article { display:grid; grid-template-columns:minmax(180px,34%) 1fr; border:1px solid var(--line); background:var(--panel); } .error-map b { padding:11px; border-right:1px solid var(--line); color:#f0c2b8; font:500 10px var(--mono); } .error-map p { margin:0; padding:10px 12px; color:var(--muted); font-size:11px; }
+    footer { margin-top:54px; padding-top:18px; border-top:1px solid var(--line); color:#667060; font:500 9px var(--mono); }
+    @media(max-width:820px){ .shell{grid-template-columns:1fr} aside{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line)} nav{grid-template-columns:repeat(2,minmax(0,1fr))} main{padding:28px 18px 70px} .grid{grid-template-columns:1fr} .error-map article{grid-template-columns:1fr} .error-map b{border-right:0;border-bottom:1px solid var(--line)} }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand"><div class="brand-mark">EB</div><b>ECHOBENCH</b><span>INSTALL & CONNECTION GUIDE</span></div>
+    <nav><a href="#order">Check order</a><a href="#android">Android</a><a href="#ios">iOS</a><a href="#device">Device setup</a><a href="#variables">Environment vars</a><a href="#verify">Verify</a><a href="#errors">Errors</a><a href="#source">Run from source</a></nav>
+  </aside>
+  <main>
+    <header class="hero">
+      <span class="eyebrow">LOCAL-FIRST MOBILE TEST STUDIO</span>
+      <h1>Installation & connection help</h1>
+      <p>EchoBench installers bundle Electron, Node.js, Appium, ADB, scrcpy-server, and the CI-built JRE. Most connection failures come from Android SDK, USB drivers, device authorization, JDK, or Xcode configuration.</p>
+      <div class="os-switch"><button data-os="windows">Windows</button><button data-os="macos">macOS</button><button data-os="linux">Linux</button><a class="language-link" href="/help.html">中文</a></div>
+    </header>
+    <div class="callout"><div><b>Recommended order</b><p>Start device → authorize USB debugging → confirm <code>adb devices -l</code> shows <code>device</code> → verify Android SDK → verify JDK → verify Appium drivers → click Connect in EchoBench.</p></div></div>
+
+    <section class="block" id="order"><h2>Identify the missing layer</h2><div class="grid">
+      <article class="card"><div class="meta"><span class="chip bundled">Bundled</span></div><h3>Usually already included</h3><ul><li>Electron and Node.js runtime</li><li>Appium and UiAutomator2/XCUITest drivers</li><li>Android Platform-Tools and adb</li><li>scrcpy-server</li><li>CI-built JRE</li></ul></article>
+      <article class="card"><div class="meta"><span class="chip required">May need setup</span></div><h3>Common missing items</h3><ul><li>Windows: Android SDK, Google USB Driver, device authorization</li><li>macOS: Android SDK, full Xcode, iOS signing</li><li>Linux: Android SDK, udev rules, plugdev permissions</li></ul></article>
+    </div></section>
+
+    <section class="os-panel" data-panel="windows"><section class="block" id="android"><h2>Windows: Android</h2><div class="grid">
+      <article class="card"><div class="meta"><span class="chip required">Required</span><span class="chip">Android SDK</span></div><h3>Install Android Studio and SDK</h3><ol class="steps"><li>Install <a href="https://developer.android.com/studio" target="_blank" rel="noopener">Android Studio</a>.</li><li>Install Platform-Tools, Build-Tools, Emulator, and an Android Platform in SDK Manager.</li><li>The default SDK path is usually <code>%LOCALAPPDATA%\Android\Sdk</code>.</li><li>Set both Android environment variables and restart EchoBench.</li></ol><div class="cmd"><button>Copy</button>setx ANDROID_HOME "%LOCALAPPDATA%\Android\Sdk"
+setx ANDROID_SDK_ROOT "%LOCALAPPDATA%\Android\Sdk"</div></article>
+      <article class="card"><div class="meta"><span class="chip required">Physical device</span></div><h3>Install the USB driver</h3><p>For Google devices, install <b>Google USB Driver</b> from SDK Tools. For other brands, install the manufacturer driver.</p><p><a href="https://developer.android.com/studio/run/win-usb" target="_blank" rel="noopener">Official driver guide</a></p></article>
+      <article class="card"><div class="meta"><span class="chip bundled">Usually bundled</span></div><h3>JDK / Java</h3><div class="cmd"><button>Copy</button>winget install EclipseAdoptium.Temurin.17.JDK -e
+java -version</div></article>
+      <article class="card"><div class="meta"><span class="chip bundled">Bundled</span></div><h3>ADB</h3><p>EchoBench uses the bundled adb. Do not set a different <code>ANDROID_ADB_SERVER_PORT</code> unless you intentionally manage a separate server.</p><div class="cmd"><button>Copy</button>adb devices -l
+adb kill-server
+adb start-server</div></article>
+    </div></section></section>
+
+    <section class="os-panel" data-panel="macos"><section class="block"><h2>macOS: Android</h2><div class="grid">
+      <article class="card"><div class="meta"><span class="chip required">Required</span></div><h3>Install Android SDK</h3><p>The default path is <code>~/Library/Android/sdk</code>.</p><div class="cmd"><button>Copy</button>export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$ANDROID_HOME/platform-tools:$PATH"</div></article>
+      <article class="card"><div class="meta"><span class="chip bundled">Usually bundled</span></div><h3>JDK</h3><div class="cmd"><button>Copy</button>brew install openjdk@17
+java -version</div></article>
+    </div></section></section>
+
+    <section class="os-panel" data-panel="linux"><section class="block"><h2>Linux: Android</h2><div class="grid">
+      <article class="card"><div class="meta"><span class="chip required">Required</span></div><h3>Install Android SDK</h3><p>Install Android Studio or Command-line Tools. The default path is often <code>~/Android/Sdk</code>.</p><div class="cmd"><button>Copy</button>export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35"</div></article>
+      <article class="card"><div class="meta"><span class="chip required">Physical device</span></div><h3>USB permissions</h3><div class="cmd"><button>Copy</button>sudo usermod -aG plugdev "$USER"
+sudo udevadm control --reload-rules
+sudo udevadm trigger</div><p>Sign out and back in after changing group membership.</p></article>
+    </div></section></section>
+
+    <section class="block" id="ios"><h2>iOS: macOS only</h2><div class="grid">
+      <article class="card"><div class="meta"><span class="chip required">Full Xcode</span></div><h3>Install Xcode</h3><p>Install Xcode from the App Store, launch it once, accept the license, then install command-line tools.</p><div class="cmd"><button>Copy</button>xcode-select --install
+sudo xcodebuild -license accept
+xcodebuild -version</div></article>
+      <article class="card"><div class="meta"><span class="chip required">Physical device</span></div><h3>WebDriverAgent signing</h3><p>Open <code>node_modules/appium-webdriveragent/WebDriverAgent.xcodeproj</code> and configure a Team and Bundle ID for WebDriverAgentRunner. Then enter the XCODE TEAM ID, signing identity, and WDA Bundle ID in EchoBench.</p></article>
+      <article class="card"><h3>RemoteXPC tunnel for iOS 18+</h3><p>Connect over USB and run:</p><div class="cmd"><button>Copy</button>sudo node node_modules/appium/index.js driver run xcuitest tunnel-creation</div></article>
+      <article class="card"><h3>Developer Mode and trust</h3><p>Enable Developer Mode on the iPhone, trust this computer, and confirm the device in Xcode Devices and Simulators.</p></article>
+    </div></section>
+
+    <section class="block" id="device"><h2>Device setup</h2><div class="grid">
+      <article class="card"><h3>Android device</h3><ul><li>Enable Developer options.</li><li>Enable USB debugging and USB installation.</li><li>Unlock the device and allow the USB debugging prompt.</li><li>Prefer File Transfer / MTP USB mode.</li></ul></article>
+      <article class="card"><h3>Android emulator</h3><ul><li>Start the emulator before EchoBench.</li><li>Confirm <code>adb devices -l</code> lists it as <code>device</code>.</li><li>Run <code>adb reconnect offline</code> if it is offline.</li><li>Do not point EchoBench at a different ADB server port.</li></ul></article>
+    </div></section>
+
+    <section class="block" id="variables"><h2>Environment variables</h2><table><thead><tr><th>Variable</th><th>Purpose</th><th>Guidance</th></tr></thead><tbody>
+      <tr><td><code>ANDROID_HOME</code></td><td>Android SDK root</td><td>Point to the directory containing platform-tools, build-tools, and platforms.</td></tr>
+      <tr><td><code>ANDROID_SDK_ROOT</code></td><td>Compatibility SDK variable</td><td>Use the same path as ANDROID_HOME.</td></tr>
+      <tr><td><code>JAVA_HOME</code></td><td>JDK root</td><td>Set JDK 17 explicitly when multiple Java versions exist.</td></tr>
+      <tr><td><code>ANDROID_ADB_SERVER_PORT</code></td><td>Custom ADB server port</td><td>Normally leave unset.</td></tr>
+      <tr><td><code>ADB_SERVER_SOCKET</code></td><td>Custom ADB socket</td><td>Inherit only when your existing toolchain explicitly uses it.</td></tr>
+    </tbody></table></section>
+
+    <section class="block" id="verify"><h2>Verify</h2><div class="grid">
+      <article class="card"><h3>Android</h3><div class="cmd"><button>Copy</button>adb version
+adb devices -l
+java -version
+echo %ANDROID_HOME%   # Windows CMD
+echo $ANDROID_HOME    # macOS / Linux</div></article>
+      <article class="card"><h3>iOS</h3><div class="cmd"><button>Copy</button>xcode-select -p
+xcodebuild -version
+xcrun xctrace list devices
+xcrun simctl list devices</div></article>
+    </div></section>
+
+    <section class="block" id="errors"><h2>Common errors</h2><div class="error-map">
+      <article><b>device unauthorized</b><p>Unlock the device, reconnect USB, and tap Allow in the USB debugging prompt. Revoke and reauthorize if needed.</p></article>
+      <article><b>device offline</b><p>Run <code>adb reconnect offline</code> and reconnect the device. Cold-boot the emulator if necessary.</p></article>
+      <article><b>Android SDK not found</b><p>Install Android SDK, set ANDROID_HOME and ANDROID_SDK_ROOT, then fully restart EchoBench.</p></article>
+      <article><b>Java not found</b><p>Install JDK 17, set JAVA_HOME, and add its bin directory to PATH.</p></article>
+      <article><b>no permissions (Linux)</b><p>Configure Android udev rules, add the user to plugdev, sign out, and rerun adb devices.</p></article>
+      <article><b>xcodebuild failed with code 65</b><p>WebDriverAgent signing failed. Configure a Team and Bundle ID in Xcode.</p></article>
+      <article><b>RemoteXPC tunnel failed</b><p>Use USB for iOS 18+, run XCUITest tunnel-creation, and check port permissions.</p></article>
+      <article><b>Appium ECONNREFUSED 4723</b><p>Open EchoBench logs for the Appium startup error and check Java, drivers, and port 4723.</p></article>
+    </div></section>
+
+    <section class="block" id="source"><h2>Run from source</h2><p>Only source builds require these tools directly.</p><div class="grid">
+      <article class="card"><h3>Requirements</h3><ul><li>Node.js 22.12+</li><li>JDK 17</li><li>Android SDK Platform-Tools</li><li>scrcpy 3.2 for command-line diagnostics</li></ul></article>
+      <article class="card"><h3>Build</h3><div class="cmd"><button>Copy</button>npm ci
+npm run typecheck
+npm test
+npm run desktop:build</div></article>
+    </div></section>
+    <div class="callout warn"><div><b>Restart after changing environment variables</b><p>Apps launched from Explorer, Finder, or a Linux desktop session do not inherit newly configured terminal variables. Fully quit and restart EchoBench.</p></div></div>
+    <footer>EchoBench installation and connection guide · Windows / macOS / Linux</footer>
+  </main>
+</div>
+<script>
+  const tabs=[...document.querySelectorAll('[data-os]')],panels=[...document.querySelectorAll('[data-panel]')];
+  const available=tabs.map(t=>t.dataset.os),requested=new URLSearchParams(location.search).get('os');
+  const detected=requested||(navigator.userAgent.includes('Windows')?'windows':navigator.userAgent.includes('Mac')?'macos':'linux');
+  const initial=available.includes(detected)?detected:(navigator.userAgent.includes('Mac')?'macos':'windows');
+  function activate(os){tabs.forEach(t=>t.classList.toggle('active',t.dataset.os===os));panels.forEach(p=>p.classList.toggle('active',p.dataset.panel===os));history.replaceState(null,'',`?os=${os}`)}
+  tabs.forEach(t=>t.addEventListener('click',()=>activate(t.dataset.os)));
+  document.querySelectorAll('.cmd button').forEach(button=>button.addEventListener('click',async()=>{const text=button.parentElement.textContent.replace('Copy','').trim();try{await navigator.clipboard.writeText(text);button.textContent='Copied';setTimeout(()=>button.textContent='Copy',1400)}catch{button.textContent='Failed'}}));
+  activate(initial);
+</script>
+</body>
+</html>

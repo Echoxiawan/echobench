@@ -14,6 +14,19 @@ Open `http://127.0.0.1:4710`, choose an Android or iOS device, and click **Conne
 
 See [Installation](install.md) for complete environment setup.
 
+## First launch: run the environment check
+
+About 0.6 seconds after the workbench opens, it checks the runtime environment. If a required item is missing, the **Environment check** dialog opens automatically. You can also click **Environment** in the toolbar.
+
+1. Wait for the check to finish and inspect failing items marked **Required** first.
+2. For an installable missing item, click **Install**; for several items, click **Install missing items**.
+3. macOS uses Homebrew and Windows uses winget. On Linux the dialog shows the matching `sudo` command and does not elevate privileges silently.
+4. Project-local Appium drivers are installed automatically; no manual driver installation is required.
+5. Wait for the result to refresh after installation. If the app asks you to restart, close and reopen EchoBench.
+6. Click **Recheck** and confirm that all required items for your target platform pass before connecting a device.
+
+See [Installation](install.md#environment-check) for the complete checks and manual fallback.
+
 ## Connect a device
 
 1. Make sure the emulator or physical device is running and visible in `adb devices -l` or `xcrun xctrace list devices`.
@@ -77,7 +90,7 @@ Replay settings (timeout, retry count, page settle wait, and locator fallback) a
 - Click **Save YAML** to download `app-steps.yaml`.
 - Expand **Export script** to download WebdriverIO JavaScript, Python, or Java test code.
 - Configure AI globally in **Settings**, then click **AI test case** and enter only the test-case title to export CSV.
-- Use **Environment** in the toolbar to diagnose missing dependencies.
+- Use **Environment** in the toolbar to view the **Environment check** results and missing dependencies.
 
 ## Drafts and clearing
 

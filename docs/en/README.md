@@ -9,6 +9,7 @@ The README covers project positioning and quick start; these documents cover the
 
 ## Usage
 
+- [EchoBench user guide](user-guide.md) - a beginner-oriented walkthrough from first launch and environment checks through recording, assertions, replay, export, and troubleshooting
 - [YAML format](yaml.md) — actions, assertions, replay policy, and locator candidates
 - [Script export](export.md) — WebdriverIO JavaScript, Appium Python Client, and Appium Java Client
 - [Multi-device sync](multi-device.md) — one-device operation, multi-device execution, live views, and platform risks

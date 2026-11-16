@@ -8,7 +8,7 @@ _Record. Replay. Echo._
 
 在本机浏览器中操作 Android / iOS 应用，录制步骤、实时校验定位器、操作一台设备并让其他设备同步执行，然后回放。
 
-![Version](https://img.shields.io/badge/version-0.1.0-orange?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.0.0-orange?style=flat-square)
 ![Node.js](https://img.shields.io/badge/Node.js-22.12%2B-339933?style=flat-square&logo=nodedotjs&logoColor=white)
 ![Appium](https://img.shields.io/badge/Appium-3.8.0-662D91?style=flat-square)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)
@@ -92,6 +92,7 @@ macOS 请把 `EchoBench.app` 拖到“应用程序”后再运行，不要直接
 
 - 完整安装（Windows / macOS / Linux）：[安装与依赖](docs/install.md)
 - 连接设备、录制第一条流程、断言和回放：[快速开始](docs/quickstart.md)
+- 从打开产品到录制、断言、回放和导出：[EchoBench 使用手册](docs/user-guide.md)
 - 桌面版安装包与更新：[GitHub Releases](https://github.com/Echoxiawan/echobench/releases)
 - 第一次 iOS 真机连接需要 Xcode / WebDriverAgent 签名配置，见安装文档。
 
@@ -142,6 +143,7 @@ Android 视频不经过 Appium 截图轮询，也不依赖 FFmpeg。scrcpy-serve
 | 文档 | 内容 |
 | --- | --- |
 | [文档索引](docs/README.md) | 所有安装、使用、运维和设计文档入口 |
+| [EchoBench 使用手册](docs/user-guide.md) | 面向新手的完整操作流程、环境体检、录制、断言、回放、导出和常见问题 |
 | [安装与依赖](docs/install.md) | Windows / macOS / Linux、Android SDK、scrcpy、JDK、Xcode、端口 |
 | [快速开始](docs/quickstart.md) | 连接设备、录制、断言、回放、草稿和停止 |
 | [YAML 脚本格式](docs/yaml.md) | 动作、断言、回放策略、候选定位器结构 |
@@ -182,15 +184,20 @@ CI 会运行 `npm run typecheck`、`npm test` 和 `npm run desktop:build`。本�
 
 <table>
 <tr>
-<td align="center" width="50%">
+<td align="center" width="33%">
 <img src="docs/contact/wechat-personal.png" alt="作者微信二维码" width="260"><br>
 <b>作者微信</b><br>
 <sub>添加时请备注 EchoBench</sub>
 </td>
-<td align="center" width="50%">
+<td align="center" width="33%">
 <img src="docs/contact/wechat-official.png" alt="公众号二维码" width="260"><br>
 <b>公众号</b><br>
 <sub>关注获取项目更新与使用文章</sub>
+</td>
+<td align="center" width="33%">
+<a href="https://x.com/AiYouyisi"><img src="https://img.shields.io/badge/X-%40AiYouyisi-black?style=flat-square&logo=x&logoColor=white" alt="X (Twitter) @AiYouyisi"></a><br>
+<b>X (Twitter)</b><br>
+<sub>关注获取项目动态</sub>
 </td>
 </tr>
 </table>

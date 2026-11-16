@@ -6,6 +6,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { delimiter, extname, join, normalize } from 'node:path';
 import { homedir } from 'node:os';
 import { AppiumClient } from '../electron/appium-client.js';
+import { configureAdbEnvironment, configureAdbServerPort, resolveAdbExecutable } from './adb.js';
 import { repairAppiumCache } from './appium-cache.js';
 import { analyzeElement, applyLiveMatches, isOccurrenceLocator, isScopedLocator, rectWithin, type LiveCandidateMatch } from '../electron/locator.js';
 import { generateAiCase, testAiConnection } from './ai.js';
@@ -23,9 +24,13 @@ import { autoInstallDrivers, runInstall } from './setup.js';
 import { getSystemInfo } from './system.js';
 import { VideoStreamManager } from './video-stream.js';
 import type { AttachSessionRequest, Device, KeyName, Locator, LocatorCandidate, MultiAction, MultiDeviceSelection, Point, ProjectScript, ReplayReport, SessionConfig, Target } from '../src/types.js';
+import { connectionEnvironmentError } from '../src/connection-diagnostic.js';
 
 const run = promisify(execFile);
+const projectRoot = process.env.ECHOBENCH_APP_ROOT?.trim() || process.cwd();
 configureAndroidEnvironment();
+configureAdbEnvironment({ appRoot: projectRoot });
+const adbServer = configureAdbServerPort();
 const client = new AppiumClient();
 const video = new VideoStreamManager();
 const multi = new MultiDeviceManager({ ensureAppium: startAppium, detectSigning: detectIosSigning, video });
@@ -33,7 +38,6 @@ const multi = new MultiDeviceManager({ ensureAppium: startAppium, detectSigning:
 function usesAdbAndroid(): boolean { return activeConfig?.platform === 'android' && !attachedSession; }
 const eventClients = new Set<ServerResponse>();
 logger.setSink((entry) => emit('server-log', { line: formatLogEntry(entry) }));
-const projectRoot = process.env.ECHOBENCH_APP_ROOT?.trim() || process.cwd();
 const releaseUrl = 'https://github.com/Echoxiawan/echobench/releases/latest';
 
 async function appVersion(): Promise<string> {
@@ -162,6 +166,9 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     if (config.platform === 'ios' && process.platform !== 'darwin') {
       throw new Error('当前操作系统不支持 iOS 自动化，仅 macOS 支持');
     }
+    const environmentReport = await runDoctor();
+    const environmentError = connectionEnvironmentError(environmentReport, config.platform);
+    if (environmentError) throw new Error(environmentError);
     await startAppium();
     logger.info('session', '创建 Appium 会话', {
       platform: config.platform,
@@ -324,7 +331,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
       recorded = { ...recorded, target };
     }
     if (usesAdbAndroid()) {
-      await run('adb', ['-s', activeConfig!.deviceId, 'shell', 'input', 'tap', String(value.x), String(value.y)]);
+      await run(resolveAdbExecutable(), ['-s', activeConfig!.deviceId, 'shell', 'input', 'tap', String(value.x), String(value.y)]);
       client.markAction();
     } else {
       await client.tapPoint(value.x, value.y);
@@ -368,7 +375,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
   }
   if (method === 'POST' && path === '/api/session/back') {
     if (usesAdbAndroid()) {
-      await run('adb', ['-s', activeConfig!.deviceId, 'shell', 'input', 'keyevent', '4']);
+      await run(resolveAdbExecutable(), ['-s', activeConfig!.deviceId, 'shell', 'input', 'keyevent', '4']);
       client.markAction();
     } else await client.back();
     scheduleSourceRefresh();
@@ -479,6 +486,11 @@ async function logStartupEnvironment(): Promise<void> {
   try {
     const system = await getSystemInfo();
     logger.info('startup', `环境检查开始：${system.osName} (${system.platform}) · 包管理器 ${system.packageManager} · iOS ${system.capabilities.ios ? '支持' : '不支持'}`);
+    logger.info('startup', 'ADB 配置', {
+      path: resolveAdbExecutable(),
+      endpoint: adbServer.socket ?? (adbServer.port ? `tcp:127.0.0.1:${adbServer.port}` : 'adb 默认'),
+      isolated: adbServer.isolated,
+    });
     const initial = await runDoctor();
     for (const check of initial.checks) {
       const level = check.status === 'ok' ? 'info' : check.status === 'warn' ? 'warn' : 'error';
@@ -577,9 +589,11 @@ async function pollDevices(): Promise<void> {
 async function listDevices(): Promise<Device[]> {
   const devices: Device[] = [];
   try {
-    const { stdout } = await run('adb', ['devices', '-l']);
+    const { stdout } = await run(resolveAdbExecutable(), ['devices', '-l']);
     devices.push(...parseAdbDevices(stdout));
-  } catch { /* 未配置 Android 工具链时不影响 iOS。 */ }
+  } catch (cause) {
+    logger.warn('devices', 'ADB 设备发现失败', cause);
+  }
   if (process.platform === 'darwin') {
     try {
       const { stdout } = await run('xcrun', ['xctrace', 'list', 'devices']);
@@ -615,7 +629,7 @@ async function replay(script: ProjectScript, startIndex = 0): Promise<ReplayRepo
       else await client.swipe(step.direction, step.duration, step.start, step.end);
     },
     back: async () => {
-      if (usesAdbAndroid()) await run('adb', ['-s', activeConfig!.deviceId, 'shell', 'input', 'keyevent', '4']);
+      if (usesAdbAndroid()) await run(resolveAdbExecutable(), ['-s', activeConfig!.deviceId, 'shell', 'input', 'keyevent', '4']);
       else await client.back();
     },
     pageSource: () => client.pageSource(),
@@ -635,7 +649,7 @@ async function replay(script: ProjectScript, startIndex = 0): Promise<ReplayRepo
 /** Android 直接走 adb 截图，比 Appium 截图快，用于首屏兜底。 */
 function adbScreenshot(deviceId: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('adb', ['-s', deviceId, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 25 * 1024 * 1024 }, (error, stdout) => {
+    execFile(resolveAdbExecutable(), ['-s', deviceId, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 25 * 1024 * 1024 }, (error, stdout) => {
       if (error) reject(error);
       else resolve(Buffer.from(stdout).toString('base64'));
     });
@@ -644,32 +658,32 @@ function adbScreenshot(deviceId: string): Promise<string> {
 
 /** 连接和重连画面时唤醒设备，避免息屏/锁屏状态下拿到纯黑首帧。 */
 async function wakeAndroid(deviceId: string): Promise<void> {
-  await run('adb', ['-s', deviceId, 'shell', 'input', 'keyevent', '224']).catch(() => undefined);
-  await run('adb', ['-s', deviceId, 'shell', 'wm', 'dismiss-keyguard']).catch(() => undefined);
+  await run(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'input', 'keyevent', '224']).catch(() => undefined);
+  await run(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'wm', 'dismiss-keyguard']).catch(() => undefined);
 }
 
 /** 会话期间保持屏幕常亮，并在断开时恢复设备原来的设置。 */
 async function prepareAndroidDevice(deviceId: string): Promise<void> {
   await wakeAndroid(deviceId);
   try {
-    const { stdout } = await run('adb', ['-s', deviceId, 'shell', 'settings', 'get', 'global', 'stay_on_while_plugged_in']);
+    const { stdout } = await run(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'settings', 'get', 'global', 'stay_on_while_plugged_in']);
     const value = stdout.trim();
     if (/^\d+$/.test(value)) androidStayOnBackup = { deviceId, value };
   } catch { /* 部分设备不允许读取该设置。 */ }
-  await run('adb', ['-s', deviceId, 'shell', 'svc', 'power', 'stayon', 'true']).catch(() => undefined);
+  await run(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'svc', 'power', 'stayon', 'true']).catch(() => undefined);
 }
 
 async function restoreAndroidDevice(deviceId: string): Promise<void> {
   const backup = androidStayOnBackup;
   androidStayOnBackup = null;
   if (!backup || backup.deviceId !== deviceId) return;
-  await run('adb', ['-s', deviceId, 'shell', 'settings', 'put', 'global', 'stay_on_while_plugged_in', backup.value]).catch(() => undefined);
+  await run(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'settings', 'put', 'global', 'stay_on_while_plugged_in', backup.value]).catch(() => undefined);
 }
 
 async function currentAndroidApp(deviceId?: string): Promise<string | null> {
   if (!deviceId) return null;
   try {
-    const { stdout } = await run('adb', ['-s', deviceId, 'shell', 'dumpsys', 'window']);
+    const { stdout } = await run(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'dumpsys', 'window']);
     const match = stdout.match(/mCurrentFocus=Window\{[^}]*?\s([A-Za-z0-9_.]+)\//)
       ?? stdout.match(/mFocusedApp=ActivityRecord\{[^}]*?\s([A-Za-z0-9_.]+)\//);
     return match?.[1] ?? null;
@@ -686,7 +700,7 @@ async function androidSwipe(deviceId: string, direction: 'up' | 'down' | 'left' 
     right: [session.width * .2, session.height * .5, session.width * .8, session.height * .5],
   }[direction]).map(Math.round);
   const boundedDuration = Math.max(100, Math.min(5000, Math.round(duration)));
-  await run('adb', ['-s', deviceId, 'shell', 'input', 'swipe', ...points.map(String), String(boundedDuration)]);
+  await run(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'input', 'swipe', ...points.map(String), String(boundedDuration)]);
 }
 
 function normalizePoint(point: Point, width: number, height: number): Point {
@@ -764,7 +778,7 @@ const IOS_KEY_CODES: Partial<Record<KeyName, string>> = { backspace: '\uE003', e
 
 async function pressKey(key: KeyName): Promise<void> {
   if (usesAdbAndroid()) {
-    await run('adb', ['-s', activeConfig!.deviceId, 'shell', 'input', 'keyevent', ANDROID_KEY_CODES[key]]);
+    await run(resolveAdbExecutable(), ['-s', activeConfig!.deviceId, 'shell', 'input', 'keyevent', ANDROID_KEY_CODES[key]]);
     client.markAction();
     return;
   }
@@ -776,7 +790,7 @@ async function pressKey(key: KeyName): Promise<void> {
 async function androidTypeText(deviceId: string, text: string): Promise<void> {
   const normalized = text.replace(/[\r\n]+/g, ' ');
   if (!normalized) return;
-  await run('adb', ['-s', deviceId, 'shell', 'input', 'text', `'${normalized.replaceAll("'", "'\\''")}'`]);
+  await run(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'input', 'text', `'${normalized.replaceAll("'", "'\\''")}'`]);
 }
 
 function openEventStream(response: ServerResponse): void {
@@ -841,6 +855,7 @@ async function shutdown(): Promise<void> {
   try { await mutateSession(releaseSessionResources); } catch { /* 退出时忽略已失效会话。 */ }
   try { await multi.stop(); } catch { /* 退出时忽略已失效会话。 */ }
   if (appiumProcess) await terminateChild(appiumProcess);
+  if (adbServer.isolated) await run(resolveAdbExecutable(), ['kill-server']).catch(() => undefined);
   await new Promise<void>((resolve) => server.close(() => resolve()));
 }
 async function releaseSessionResources(): Promise<void> {

@@ -54,7 +54,7 @@ npx electron-builder --mac dmg
 
 Do not run `EchoBench.app` directly from the DMG. The DMG is a read-only volume; dependency installation, Appium caches, and updates can fail. Drag it to Applications first.
 
-The first launch checks system tools such as JDK, adb, scrcpy, and Xcode. The installer bundles Electron/Node, Appium, drivers, and scrcpy-server; JDK, adb, and Xcode still come from the machine or the environment panel. To bundle a JRE, use `./local-package.sh --dist --with-jre`.
+The first launch checks system tools such as JDK, adb, scrcpy, and Xcode. CI installers bundle a pinned Android Platform-Tools release, Electron/Node, Appium, drivers, and scrcpy-server; JDK and Xcode still come from the machine or the environment panel. To bundle a JRE, use `./local-package.sh --dist --with-jre`. For a local package with bundled adb, run `node scripts/prepare-platform-tools.mjs` first.
 
 Electron apps launched from Finder do not inherit the full terminal PATH. EchoBench adds common paths such as `/opt/homebrew/bin` and `/usr/local/bin` to child processes so Homebrew-installed tools can be found.
 
@@ -69,6 +69,7 @@ EchoBench.app / EchoBench.exe
 ├── dist-desktop/          # Electron main process
 ├── node_modules/          # production dependencies and Appium drivers
 ├── resources/
+│   ├── platform-tools/    # bundled adb (CI package)
 │   ├── scrcpy-server
 │   └── jre/               # optional
 └── userData/
@@ -85,6 +86,7 @@ Updates come from GitHub Releases: <https://github.com/Echoxiawan/echobench/rele
 - checks once 8 seconds after startup;
 - checks every 24 hours while the process stays alive;
 - manual check from the menu and the update entry;
+- reads the GitHub Releases Atom feed first to avoid the anonymous API limit of 60 requests per hour, falling back to the API only when needed;
 - every platform shows the version, release notes, and a platform-specific download URL when an update exists;
 - clicking "Open download page" opens the installer download in the browser for manual installation;
 - no in-place update, no `userData` changes, no npm install, and no system tool changes.

@@ -27,7 +27,12 @@ export function loadAiConfig(storage: AiConfigStorage | null = browserStorage())
 }
 
 export function saveAiConfig(config: AiConfig, storage: AiConfigStorage | null = browserStorage()): AiConfig {
-  const normalized = normalizeAiConfig(config);
+  // 设置页还包含语言等非 AI 配置；保存时不强制要求 AI 字段完整。
+  const normalized = {
+    baseUrl: config.baseUrl.trim(),
+    model: config.model.trim(),
+    apiKey: config.apiKey.trim(),
+  };
   try {
     storage?.setItem(AI_CONFIG_KEY, JSON.stringify({
       version: AI_CONFIG_VERSION,
@@ -53,7 +58,6 @@ export function parseAiConfig(value: unknown): AiConfig | null {
   const baseUrl = stringValue(value.baseUrl);
   const model = stringValue(value.model);
   const apiKey = stringValue(value.apiKey);
-  if (!baseUrl || !model) return null;
   return { baseUrl, model, apiKey };
 }
 

@@ -9,6 +9,7 @@ function doctorDeps(overrides: Partial<DoctorDeps> = {}): DoctorDeps {
     platform: 'darwin',
     packageManager: 'brew',
     env: {},
+    adbExecutable: 'adb',
     fetchStatus: async () => true,
     scrcpyServer: async () => '/tools/scrcpy-server',
     exec: async (file) => {
@@ -59,6 +60,26 @@ test('内置 scrcpy-server 时不依赖系统 scrcpy 命令', async () => {
   const scrcpy = report.checks.find((check) => check.id === 'scrcpy');
   assert.equal(scrcpy?.status, 'ok');
   assert.match(scrcpy?.detail ?? '', /内置 scrcpy-server/);
+});
+
+test('使用内置 adb 时不再提示安装 Platform-Tools', async () => {
+  const report = await runDoctor(doctorDeps({
+    adbExecutable: '/bundle/adb',
+    exec: async (file) => {
+      if (file === process.execPath) return { stdout: 'uiautomator2@8.7.0\nxcuitest@12.18.1', stderr: '' };
+      if (file === '/bundle/adb') return { stdout: 'Android Debug Bridge version 1.0.41', stderr: '' };
+      if (file === 'scrcpy') return { stdout: 'scrcpy 3.2', stderr: '' };
+      if (file === 'java') return { stdout: '', stderr: 'openjdk version "17.0.10"' };
+      if (file === 'xcode-select') return { stdout: '/Xcode', stderr: '' };
+      if (file === 'xcrun') return { stdout: '', stderr: '' };
+      throw new Error(`未找到 ${file}`);
+    },
+  }));
+  const adb = report.checks.find((check) => check.id === 'adb');
+  assert.equal(adb?.name, '内置 adb');
+  assert.equal(adb?.status, 'ok');
+  assert.equal(adb?.installable, false);
+  assert.match(adb?.detail ?? '', /内置 Platform-Tools/);
 });
 
 test('缺失的必要依赖会标记为可安装', async () => {

@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { DoctorCheck, DoctorReport, PackageManager } from '../src/types.js';
+import { resolveAdbExecutable } from './adb.js';
 import { detectPackageManager, systemInfoForPlatform } from './system.js';
 import { findScrcpyServer } from './video-stream.js';
 
@@ -19,6 +20,7 @@ export interface DoctorDeps {
   platform?: NodeJS.Platform;
   env?: NodeJS.ProcessEnv;
   packageManager?: PackageManager;
+  adbExecutable?: string;
 }
 
 export async function runDoctor(deps: DoctorDeps = {}): Promise<DoctorReport> {
@@ -32,6 +34,8 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<DoctorReport> {
   const packageManager = deps.packageManager ?? await detectPackageManager(platform);
   const system = systemInfoForPlatform(platform, packageManager);
   const driverEntry = join(projectRoot, 'node_modules', 'appium', 'index.js');
+  const adb = deps.adbExecutable ?? resolveAdbExecutable({ env, platform, appRoot: projectRoot });
+  const bundledAdb = adb !== 'adb';
   let installedDrivers: string[] = [];
   let driverError = '';
   try {
@@ -65,7 +69,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<DoctorReport> {
         return driver
           ? { status: 'ok', detail: driver }
           : { status: 'warn', detail: driverError || '未检测到 xcuitest', fix: '点击安装，或执行 npm run appium:setup:ios' };
-      }, { installable: true }),
+      }, { required: true, installable: true }),
     ] : []),
     safeCheck('appium-server', 'Appium 服务', async () => {
       const running = await fetchStatus();
@@ -73,15 +77,25 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<DoctorReport> {
         ? { status: 'ok', detail: '127.0.0.1:4723 正在运行' }
         : { status: 'warn', detail: '当前未运行', fix: '连接设备时会由本工具自动启动，无需手动处理' };
     }),
-    safeCheck('adb', 'adb', async () => {
+    safeCheck('adb', bundledAdb ? '内置 adb' : 'adb', async () => {
       let result: { stdout: string; stderr: string };
-      try { result = await exec('adb', ['version'], 3_000); }
-      catch (cause) { return { status: 'fail', detail: message(cause), fix: installHint(platform, 'adb', packageManager) }; }
+      try { result = await exec(adb, ['version'], 3_000); }
+      catch (cause) {
+        return {
+          status: 'fail',
+          detail: message(cause),
+          fix: bundledAdb ? '内置 adb 无法运行，请重新安装 EchoBench' : installHint(platform, 'adb', packageManager),
+        };
+      }
       const first = `${result.stdout}\n${result.stderr}`.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? '';
       return first
-        ? { status: 'ok', detail: first }
-        : { status: 'warn', detail: 'adb 无输出', fix: installHint(platform, 'adb', packageManager) };
-    }, { required: true, installable: true }),
+        ? { status: 'ok', detail: bundledAdb ? `${first}；内置 Platform-Tools` : first }
+        : {
+            status: 'warn',
+            detail: 'adb 无输出',
+            fix: bundledAdb ? '内置 adb 无法运行，请重新安装 EchoBench' : installHint(platform, 'adb', packageManager),
+          };
+    }, { required: true, installable: !bundledAdb }),
     safeCheck('android-sdk', 'Android SDK', async () => {
       const candidates = [
         env.ANDROID_SDK_ROOT,
@@ -93,8 +107,8 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<DoctorReport> {
       for (const candidate of candidates) {
         if (await exists(candidate)) return { status: 'ok', detail: candidate };
       }
-      return { status: 'warn', detail: '未找到 Android SDK 目录', fix: '在 Android Studio 安装 SDK，或设置 ANDROID_SDK_ROOT；仅使用 adb 时此项不影响连接' };
-    }),
+      return { status: 'warn', detail: '未找到 Android SDK 目录', fix: '安装 Android Studio 和 Android SDK，或设置 ANDROID_HOME / ANDROID_SDK_ROOT 后重启 EchoBench' };
+    }, { required: true }),
     safeCheck('scrcpy', 'scrcpy', async () => {
       let serverPath = '';
       try { serverPath = await scrcpyServer(); } catch { /* 下面继续检查系统命令。 */ }
@@ -127,7 +141,7 @@ export async function runDoctor(deps: DoctorDeps = {}): Promise<DoctorReport> {
         const simulators = await exec('xcrun', ['simctl', 'list', 'devices'], 6_000).then((result) => result.stdout).catch(() => '');
         const booted = (simulators.match(/\(Booted\)/g) ?? []).length;
         return { status: path ? 'ok' : 'warn', detail: path ? `${path}；已启动模拟器 ${booted} 个` : '未找到 Xcode 命令行工具', fix: path ? undefined : '点击安装命令行工具，或在 App Store 安装完整 Xcode' };
-      }, { installable: true }),
+      }, { required: true, installable: true }),
     ] : []),
   ]);
 

@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>EchoBench 安装与连接帮助</title>
+  <style>
+    :root {
+      --bg: #0d0f0d;
+      --panel: #151814;
+      --raised: #1c211a;
+      --line: #30372d;
+      --line-strong: #4c5745;
+      --text: #e9eee5;
+      --muted: #8d9788;
+      --dim: #687163;
+      --lime: #b8f34a;
+      --amber: #e4ae61;
+      --red: #ff7d69;
+      --blue: #8db7dc;
+      --mono: "SFMono-Regular", "Cascadia Mono", "Roboto Mono", monospace;
+      --condensed: "Avenir Next Condensed", "DIN Condensed", sans-serif;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 78% 0%, #26301f 0, transparent 34%),
+        linear-gradient(90deg, #0b0d0b, var(--bg) 28%, #10130f);
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.7;
+    }
+    a { color: var(--lime); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre { font-family: var(--mono); }
+    .shell { min-height: 100vh; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 20px;
+      border-right: 1px solid var(--line);
+      background: #0b0e0be8;
+      backdrop-filter: blur(16px);
+      overflow-y: auto;
+    }
+    .brand { display: grid; gap: 6px; margin-bottom: 28px; }
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      color: #0b0e08;
+      background: var(--lime);
+      clip-path: polygon(0 0, 100% 0, 100% 72%, 72% 100%, 0 100%);
+      font: 900 22px var(--condensed);
+    }
+    .brand b { font: 800 19px var(--condensed); letter-spacing: 2px; }
+    .brand span { color: var(--muted); font: 500 9px var(--mono); letter-spacing: 2px; }
+    nav { display: grid; gap: 4px; }
+    nav a {
+      padding: 8px 9px;
+      border-left: 2px solid transparent;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    nav a:hover { border-color: var(--lime); background: var(--raised); color: var(--text); text-decoration: none; }
+    .nav-label { margin: 20px 0 5px; color: #545d50; font: 500 8px var(--mono); letter-spacing: 1.5px; }
+    main { width: min(1120px, 100%); padding: 44px 48px 90px; }
+    header.hero { display: grid; gap: 14px; margin-bottom: 34px; }
+    .eyebrow { color: var(--lime); font: 600 10px var(--mono); letter-spacing: 2px; }
+    h1 { margin: 0; font: 800 clamp(30px, 4vw, 56px)/1 var(--condensed); letter-spacing: 1px; }
+    .hero p { max-width: 760px; margin: 0; color: #aab5a0; font-size: 13px; }
+    .os-switch { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 5px; }
+    .os-switch button {
+      min-height: 35px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: var(--panel);
+      cursor: pointer;
+      font: 600 10px var(--mono);
+      letter-spacing: .5px;
+    }
+    .os-switch button.active { border-color: var(--lime); background: var(--lime); color: #0c1008; }
+    .language-link { align-self: center; margin-left: 8px; padding: 8px 11px; border: 1px solid var(--line); color: var(--muted); font: 600 10px var(--mono); }
+    .language-link:hover { color: var(--text); border-color: var(--lime); text-decoration: none; }
+    .callout {
+      display: grid;
+      grid-template-columns: 4px 1fr;
+      gap: 14px;
+      margin: 18px 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .callout::before { content: ""; background: var(--lime); }
+    .callout.warn::before { background: var(--amber); }
+    .callout.danger::before { background: var(--red); }
+    .callout b { display: block; margin-bottom: 3px; font-size: 12px; }
+    .callout p { margin: 0; color: var(--muted); font-size: 11px; }
+    section.block { scroll-margin-top: 26px; margin-top: 34px; }
+    section.block > h2 {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 14px;
+      font: 700 22px var(--condensed);
+      letter-spacing: .5px;
+    }
+    section.block > h2::before { content: ""; width: 18px; height: 2px; background: var(--lime); }
+    section.block > p { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(145deg, #171b15, #121510);
+    }
+    .card h3 { margin: 0 0 6px; font-size: 13px; }
+    .card p { margin: 0 0 10px; color: var(--muted); font-size: 11px; }
+    .card ul, .steps { margin: 0; padding-left: 18px; color: #b0baa7; font-size: 11px; }
+    .card li, .steps li { margin: 5px 0; }
+    .meta { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+    .chip {
+      padding: 2px 6px;
+      border: 1px solid #46513f;
+      color: #aab7a1;
+      font: 500 8px var(--mono);
+      letter-spacing: .4px;
+    }
+    .chip.required { color: #ffd3ca; border-color: #724c43; }
+    .chip.bundled { color: var(--lime); border-color: #4f682e; }
+    .cmd {
+      position: relative;
+      margin: 9px 0;
+      padding: 10px 38px 10px 11px;
+      overflow-x: auto;
+      border: 1px solid #2d342a;
+      background: #090b08;
+      color: #c9d5bf;
+      font: 400 10px/1.6 var(--mono);
+      white-space: pre;
+    }
+    .cmd button {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      border: 1px solid #394134;
+      background: #171b15;
+      color: var(--muted);
+      cursor: pointer;
+      font: 500 8px var(--mono);
+    }
+    .os-panel { display: none; }
+    .os-panel.active { display: block; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th, td { padding: 9px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: #bcc8b3; background: #171b15; font-weight: 600; }
+    td { color: var(--muted); }
+    .error-map { display: grid; gap: 8px; }
+    .error-map article { display: grid; grid-template-columns: minmax(170px, 34%) 1fr; border: 1px solid var(--line); background: var(--panel); }
+    .error-map b { padding: 11px; border-right: 1px solid var(--line); color: #f0c2b8; font: 500 10px var(--mono); }
+    .error-map p { margin: 0; padding: 10px 12px; color: var(--muted); font-size: 11px; }
+    footer { margin-top: 54px; padding-top: 18px; border-top: 1px solid var(--line); color: #667060; font: 500 9px var(--mono); }
+    @media (max-width: 820px) {
+      .shell { grid-template-columns: 1fr; }
+      aside { position: relative; height: auto; padding: 18px; border-right: 0; border-bottom: 1px solid var(--line); }
+      nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .brand { margin-bottom: 15px; }
+      main { padding: 28px 18px 70px; }
+      .grid { grid-template-columns: 1fr; }
+      .error-map article { grid-template-columns: 1fr; }
+      .error-map b { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <div class="brand-mark">EB</div>
+        <b>ECHOBENCH</b>
+        <span>INSTALL & CONNECTION GUIDE</span>
+      </div>
+      <div class="nav-label">开始</div>
+      <nav>
+        <a href="#overview">检查顺序</a>
+        <a href="#android">Android 环境</a>
+        <a href="#ios">iOS 环境</a>
+        <a href="#device">设备准备</a>
+        <a href="#variables">环境变量</a>
+        <a href="#verify">验证命令</a>
+        <a href="#errors">常见错误</a>
+        <a href="#source">源码运行</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <span class="eyebrow">LOCAL-FIRST MOBILE TEST STUDIO</span>
+        <h1>安装与连接帮助</h1>
+        <p>EchoBench 安装包已经内置 Electron、Node.js、Appium、ADB、scrcpy-server 和 CI 构建版 JRE。绝大多数连接问题来自 Android SDK、USB 驱动、设备授权、JDK 或 Xcode 配置。按本页顺序检查，不需要安装额外重复组件。</p>
+        <div class="os-switch" role="tablist" aria-label="操作系统">
+          <button type="button" data-os="windows">Windows</button>
+          <button type="button" data-os="macos">macOS</button>
+          <button type="button" data-os="linux">Linux</button>
+          <a class="language-link" href="/help.en.html">English</a>
+        </div>
+      </header>
+
+      <div class="callout">
+        <div>
+          <b>推荐排查顺序</b>
+          <p>设备已启动 → USB 调试已授权 → <code>adb devices -l</code> 显示 <code>device</code> → Android SDK 路径有效 → JDK 可用 → Appium UiAutomator2/XCUITest 驱动可用 → EchoBench 点击“连接设备”。</p>
+        </div>
+      </div>
+
+      <section class="block" id="overview">
+        <h2>先判断缺的是哪一层</h2>
+        <div class="grid">
+          <article class="card">
+            <div class="meta"><span class="chip bundled">安装包内置</span></div>
+            <h3>不需要单独安装</h3>
+            <p>CI 构建的 EchoBench 安装包通常已包含：</p>
+            <ul>
+              <li>Electron 与 Node.js 运行时</li>
+              <li>Appium 与 UiAutomator2/XCUITest 驱动</li>
+              <li>Android Platform-Tools / adb</li>
+              <li>scrcpy-server</li>
+              <li>CI 构建版 JRE</li>
+            </ul>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="chip required">可能需要配置</span></div>
+            <h3>常见缺失项</h3>
+            <ul>
+              <li>Windows：Android SDK、Google USB Driver、设备授权</li>
+              <li>macOS：Android SDK、完整 Xcode、iOS 签名</li>
+              <li>Linux：Android SDK、udev 规则、plugdev 权限</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="os-panel" data-panel="windows">
+        <section class="block" id="android">
+          <h2>Windows：Android 环境</h2>
+          <div class="grid">
+            <article class="card">
+              <div class="meta"><span class="chip required">必需</span><span class="chip">Android SDK</span></div>
+              <h3>安装 Android Studio 和 SDK</h3>
+              <ol class="steps">
+                <li>安装 <a href="https://developer.android.com/studio" target="_blank" rel="noopener">Android Studio</a>。</li>
+                <li>打开 SDK Manager，安装 Platform-Tools、Build-Tools、Emulator 和一个 Android Platform。</li>
+                <li>默认 SDK 路径通常为 <code>%LOCALAPPDATA%\Android\Sdk</code>。</li>
+                <li>设置用户环境变量 <code>ANDROID_HOME</code> 和 <code>ANDROID_SDK_ROOT</code>。</li>
+              </ol>
+              <div class="cmd"><button type="button">复制</button>setx ANDROID_HOME "%LOCALAPPDATA%\Android\Sdk"
+setx ANDROID_SDK_ROOT "%LOCALAPPDATA%\Android\Sdk"</div>
+              <p>设置后关闭并重新启动 EchoBench，环境变量不会自动进入已经运行的进程。</p>
+            </article>
+            <article class="card">
+              <div class="meta"><span class="chip required">Android 真机</span></div>
+              <h3>安装 USB 驱动</h3>
+              <p>Google 设备可在 SDK Manager 的 <b>SDK Tools</b> 中安装 <b>Google USB Driver</b>。国产或厂商设备优先安装对应品牌的 Windows USB 驱动。</p>
+              <p><a href="https://developer.android.com/studio/run/win-usb" target="_blank" rel="noopener">Google USB Driver 官方说明</a></p>
+            </article>
+            <article class="card">
+              <div class="meta"><span class="chip bundled">通常内置</span><span class="chip">JDK 17</span></div>
+              <h3>JDK / Java</h3>
+              <p>CI 安装包会内置 JRE。如果环境体检仍然提示 Java 不可用，可安装 <a href="https://adoptium.net/temurin/releases/" target="_blank" rel="noopener">Temurin 17</a>：</p>
+              <div class="cmd"><button type="button">复制</button>winget install EclipseAdoptium.Temurin.17.JDK -e</div>
+              <div class="cmd"><button type="button">复制</button>java -version</div>
+            </article>
+            <article class="card">
+              <div class="meta"><span class="chip bundled">内置</span><span class="chip">adb</span></div>
+              <h3>ADB</h3>
+              <p>EchoBench 默认使用安装包内的 adb。系统 adb 只用于命令行诊断；不要另设错误的 <code>ANDROID_ADB_SERVER_PORT</code>。</p>
+              <div class="cmd"><button type="button">复制</button>adb devices -l
+adb kill-server
+adb start-server</div>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="os-panel" data-panel="macos">
+        <section class="block">
+          <h2>macOS：Android 环境</h2>
+          <div class="grid">
+            <article class="card">
+              <div class="meta"><span class="chip required">必需</span><span class="chip">Android SDK</span></div>
+              <h3>安装 Android Studio 和 SDK</h3>
+              <p>安装 <a href="https://developer.android.com/studio" target="_blank" rel="noopener">Android Studio</a>，在 SDK Manager 安装 Platform-Tools、Build-Tools、Emulator 和 Android Platform。</p>
+              <p>默认路径：<code>~/Library/Android/sdk</code>。</p>
+              <div class="cmd"><button type="button">复制</button>export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$ANDROID_HOME/platform-tools:$PATH"</div>
+            </article>
+            <article class="card">
+              <div class="meta"><span class="chip bundled">通常内置</span><span class="chip">JDK</span></div>
+              <h3>JDK / Java</h3>
+              <p>CI 安装包会内置 JRE。源码运行或需要系统 JDK 时：</p>
+              <div class="cmd"><button type="button">复制</button>brew install openjdk@17
+java -version</div>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="os-panel" data-panel="linux">
+        <section class="block">
+          <h2>Linux：Android 环境</h2>
+          <div class="grid">
+            <article class="card">
+              <div class="meta"><span class="chip required">必需</span><span class="chip">Android SDK</span></div>
+              <h3>安装 Android SDK</h3>
+              <p>安装 Android Studio，或仅安装 Command-line Tools 后使用 <code>sdkmanager</code>。默认 SDK 路径通常为 <code>~/Android/Sdk</code>。</p>
+              <div class="cmd"><button type="button">复制</button>export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35"</div>
+            </article>
+            <article class="card">
+              <div class="meta"><span class="chip required">真机必需</span></div>
+              <h3>USB 设备权限</h3>
+              <p>没有 udev 权限时，adb 常见表现是 <code>no permissions</code> 或设备一闪而过。</p>
+              <div class="cmd"><button type="button">复制</button>sudo usermod -aG plugdev "$USER"
+sudo udevadm control --reload-rules
+sudo udevadm trigger</div>
+              <p>完成后注销并重新登录。厂商设备可参考 <a href="https://developer.android.com/studio/run/device#setting-up" target="_blank" rel="noopener">官方设备设置说明</a>。</p>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="block" id="ios">
+        <h2>iOS：仅 macOS</h2>
+        <div class="grid">
+          <article class="card">
+            <div class="meta"><span class="chip required">macOS</span><span class="chip">完整 Xcode</span></div>
+            <h3>安装 Xcode</h3>
+            <p>从 App Store 安装 <a href="https://developer.apple.com/xcode/" target="_blank" rel="noopener">Xcode</a>，至少启动一次并同意许可协议，然后安装命令行工具：</p>
+            <div class="cmd"><button type="button">复制</button>xcode-select --install
+sudo xcodebuild -license accept
+xcodebuild -version</div>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="chip required">真机</span><span class="chip">签名</span></div>
+            <h3>WebDriverAgent 签名</h3>
+            <p>iOS 真机需要 Apple Developer Team。打开 <code>node_modules/appium-webdriveragent/WebDriverAgent.xcodeproj</code>，为 WebDriverAgentRunner 配置 Team 和 Bundle ID。</p>
+            <p>然后在 EchoBench 中填写 <b>XCODE TEAM ID</b>、签名身份和 WDA Bundle ID。</p>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="chip">iOS 18+</span></div>
+            <h3>RemoteXPC 隧道</h3>
+            <p>iOS 18+ 真机需要 USB 连接并创建 tunnel。若环境体检或日志提示隧道失败，在 EchoBench 项目目录运行：</p>
+            <div class="cmd"><button type="button">复制</button>sudo node node_modules/appium/index.js driver run xcuitest tunnel-creation</div>
+          </article>
+          <article class="card">
+            <div class="meta"><span class="chip">权限</span></div>
+            <h3>开发者模式与信任</h3>
+            <p>在 iPhone 设置中打开开发者模式，连接后选择“信任此电脑”，并在 Xcode 的 Devices and Simulators 中确认设备可用。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="block" id="device">
+        <h2>设备准备</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Android 真机</h3>
+            <ul>
+              <li>连续点击“版本号”开启开发者选项。</li>
+              <li>开启 USB 调试和“USB 安装”。</li>
+              <li>连接 USB，解锁屏幕并确认“允许 USB 调试”。</li>
+              <li>USB 模式优先选择文件传输或 MTP。</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Android 模拟器</h3>
+            <ul>
+              <li>先启动模拟器，再打开 EchoBench。</li>
+              <li>确认 <code>adb devices -l</code> 中出现 <code>emulator-5554 device</code>。</li>
+              <li>如果显示 <code>offline</code>，执行 <code>adb reconnect offline</code>。</li>
+              <li>不要为 EchoBench 单独设置不同的 ADB Server 端口。</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="block" id="variables">
+        <h2>环境变量</h2>
+        <table>
+          <thead><tr><th>变量</th><th>用途</th><th>建议</th></tr></thead>
+          <tbody>
+            <tr><td><code>ANDROID_HOME</code></td><td>Android SDK 根目录</td><td>指向包含 <code>platform-tools</code>、<code>build-tools</code>、<code>platforms</code> 的目录。</td></tr>
+            <tr><td><code>ANDROID_SDK_ROOT</code></td><td>Android SDK 根目录兼容变量</td><td>与 <code>ANDROID_HOME</code> 设置为同一路径。</td></tr>
+            <tr><td><code>JAVA_HOME</code></td><td>JDK 根目录</td><td>存在多个 Java 版本时明确指定 JDK 17。</td></tr>
+            <tr><td><code>ANDROID_ADB_SERVER_PORT</code></td><td>ADB Server 自定义端口</td><td>通常不要设置，默认由 adb 决定。</td></tr>
+            <tr><td><code>ADB_SERVER_SOCKET</code></td><td>ADB Server 自定义 socket</td><td>仅当已有开发环境明确使用自定义 socket 时继承。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="block" id="verify">
+        <h2>验证命令</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>Android</h3>
+            <div class="cmd"><button type="button">复制</button>adb version
+adb devices -l
+java -version
+echo %ANDROID_HOME%   # Windows CMD
+echo $ANDROID_HOME    # macOS / Linux</div>
+            <p>设备状态必须是 <code>device</code>，不能是 <code>unauthorized</code> 或 <code>offline</code>。</p>
+          </article>
+          <article class="card">
+            <h3>iOS</h3>
+            <div class="cmd"><button type="button">复制</button>xcode-select -p
+xcodebuild -version
+xcrun xctrace list devices
+xcrun simctl list devices</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="block" id="errors">
+        <h2>常见错误对照</h2>
+        <div class="error-map">
+          <article><b>device unauthorized</b><p>解锁手机，重新插拔 USB，在“允许 USB 调试”弹窗中点击允许；必要时撤销 USB 调试授权后重新授权。</p></article>
+          <article><b>device offline</b><p>执行 <code>adb reconnect offline</code>，重新插拔设备；模拟器可冷启动或切换 ADB Server 默认端口后重试。</p></article>
+          <article><b>ANDROID_HOME / Android SDK not found</b><p>安装 Android SDK，设置 <code>ANDROID_HOME</code> 和 <code>ANDROID_SDK_ROOT</code>，完全退出并重启 EchoBench。</p></article>
+          <article><b>java is not recognized / Java not found</b><p>安装 JDK 17，设置 <code>JAVA_HOME</code>，并确保 <code>%JAVA_HOME%\bin</code> 或 <code>$JAVA_HOME/bin</code> 位于 PATH。</p></article>
+          <article><b>no permissions（Linux）</b><p>配置 Android udev 规则，将当前用户加入 plugdev 组，重新登录后再次运行 <code>adb devices -l</code>。</p></article>
+          <article><b>xcodebuild failed with code 65</b><p>WebDriverAgent 签名失败。填写 Team ID，在 Xcode 中为 WebDriverAgentRunner 配置开发团队与 Bundle ID。</p></article>
+          <article><b>RemoteXPC tunnel failed</b><p>iOS 18+ 真机请使用 USB，运行 XCUITest tunnel-creation，并确保端口和权限未被其他进程占用。</p></article>
+          <article><b>Appium ECONNREFUSED 4723</b><p>打开 EchoBench 日志查看 Appium 启动失败原因，优先检查 Java、驱动安装和端口 4723 是否被其他程序占用。</p></article>
+        </div>
+      </section>
+
+      <section class="block" id="source">
+        <h2>源码运行环境</h2>
+        <p>只有从源码运行或自行本地打包时才需要以下工具。正式安装包不需要重复安装 Appium、Node.js、adb 或 scrcpy-server。</p>
+        <div class="grid">
+          <article class="card">
+            <h3>通用</h3>
+            <ul>
+              <li><a href="https://nodejs.org/" target="_blank" rel="noopener">Node.js 22.12+</a></li>
+              <li>JDK 17</li>
+              <li>Android SDK Platform-Tools</li>
+              <li><a href="https://github.com/Genymobile/scrcpy" target="_blank" rel="noopener">scrcpy 3.2</a>（系统命令行诊断）</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>安装项目依赖</h3>
+            <div class="cmd"><button type="button">复制</button>npm ci
+npm run typecheck
+npm test
+npm run desktop:build</div>
+          </article>
+        </div>
+      </section>
+
+      <div class="callout warn">
+        <div>
+          <b>修改环境变量后必须重启应用</b>
+          <p>Windows 的资源管理器启动、macOS Finder 启动和 Linux 桌面启动都不会自动继承新终端变量。设置 SDK/JDK 后请完全退出 EchoBench，再从新终端或重新登录后的桌面环境启动。</p>
+        </div>
+      </div>
+
+      <footer>EchoBench 安装与连接帮助 · Windows / macOS / Linux · 所有命令均可直接复制</footer>
+    </main>
+  </div>
+
+  <script>
+    const tabs = [...document.querySelectorAll('[data-os]')];
+    const panels = [...document.querySelectorAll('[data-panel]')];
+    const available = tabs.map((tab) => tab.dataset.os);
+    const requested = new URLSearchParams(location.search).get('os');
+    const detected = requested || (navigator.userAgent.includes('Windows') ? 'windows'
+      : navigator.userAgent.includes('Mac') ? 'macos'
+      : navigator.userAgent.includes('Linux') ? 'linux' : 'windows');
+    const initial = available.includes(detected) ? detected : 'windows';
+
+    function activate(os, updateHash = true) {
+      tabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.os === os));
+      panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === os));
+      if (updateHash) history.replaceState(null, '', `?os=${os}`);
+    }
+
+    tabs.forEach((tab) => tab.addEventListener('click', () => activate(tab.dataset.os)));
+    document.querySelectorAll('.cmd button').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const command = button.parentElement.textContent.replace('复制', '').trim();
+        try {
+          await navigator.clipboard.writeText(command);
+          button.textContent = '已复制';
+          setTimeout(() => { button.textContent = '复制'; }, 1400);
+        } catch {
+          button.textContent = '复制失败';
+        }
+      });
+    });
+    activate(initial, false);
+  </script>
+</body>
+</html>

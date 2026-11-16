@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, AlertTriangle, Bug, CheckCircle2, ChevronDown, ChevronRight, CircleStop, Code2, Copy, Crosshair, FileInput, FileSpreadsheet, FileText, FolderOpen, GripVertical, Hand, Keyboard, LayoutGrid, MonitorSmartphone, MousePointerClick, Pencil, Play, Radio, RefreshCw, Save, Send, Settings2, Smartphone, Sparkles, Stethoscope, Trash2, Unplug, Undo2, Wifi, WifiOff, XCircle, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, AlertTriangle, Bug, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, CircleStop, Code2, Copy, Crosshair, FileInput, FileSpreadsheet, FileText, FolderOpen, GripVertical, Hand, Keyboard, Languages, LayoutGrid, MonitorSmartphone, MousePointerClick, Pencil, Play, Radio, RefreshCw, Save, Send, Settings2, Smartphone, Sparkles, Stethoscope, Trash2, Unplug, Undo2, Wifi, WifiOff, XCircle, ZoomIn, ZoomOut } from 'lucide-react';
 import type { AiConfig, AppInfo, Device, DoctorReport, ElementTreeResponse, KeyName, Locator, LocatorStrategy, MultiAction, MultiActionResult, MultiDeviceSelection, MultiDeviceStatus, MultiSessionStatus, Platform, ProjectScript, RecordedTap, ReplayActivity, ReplaySettings, ReplayStepResult, SessionConfig, SessionState, Step, SystemInfo, Target, TextMatch, WaitCondition } from './types';
+import { buildConnectionDiagnostic, type ConnectionDiagnostic } from './connection-diagnostic';
 import { loadAiConfig, normalizeAiConfig, saveAiConfig } from './ai-config';
 import { autoInstallCandidates } from './setup-plan';
 import { defaultReplaySettings } from './types';
 import { clearDraft, loadDraft, saveDraft } from './draft';
 import { clampLayout, defaultLayout, layoutLimits, loadLayout, saveLayout, type PanelLayout } from './layout';
+import { useI18n } from './i18n';
+import { errorText, localeOptions, localizeGeneratedText } from './messages';
 
 type ReplayRun = { total: number; startIndex: number; status: 'running' | 'passed' | 'failed'; startedAt: number; finishedAt?: number; duration?: number; results: Record<number, ReplayStepResult> };
 type DebugRun = { stepId: string; status: 'running' | 'passed' | 'failed'; message?: string; duration?: number; activity?: string };
@@ -14,8 +17,10 @@ const specialKeys: Record<string, KeyName> = { Backspace: 'backspace', Enter: 'e
 const actionNames: Record<Step['action'], string> = { tap: '点击', doubleTap: '双击', longPress: '长按', pinch: '双指缩放', input: '输入', swipe: '滑动', back: '返回', wait: '断言' };
 const conditionNames: Record<WaitCondition, string> = { exists: '控件出现', visible: '控件可见', hidden: '控件隐藏', enabled: '控件可用', disabled: '控件禁用', checked: '控件已选中', unchecked: '控件未选中', empty: '控件内容为空', text: '控件文本匹配', stable: '页面稳定' };
 const uid = () => crypto.randomUUID();
+const DEFAULT_PROJECT_NAMES = new Set(['应用操作录制', 'App recording']);
 
 export function App() {
+  const { locale, setLocale, t } = useI18n();
   const [devices, setDevices] = useState<Device[]>([]);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [discoveringDevices, setDiscoveringDevices] = useState(false);
@@ -38,7 +43,7 @@ export function App() {
   const [streamNonce, setStreamNonce] = useState(0);
   const [streamStatus, setStreamStatus] = useState<'idle' | 'loading' | 'playing' | 'failed'>('idle');
   const [steps, setSteps] = useState<Step[]>([]);
-  const [projectName, setProjectName] = useState('应用操作录制');
+  const [projectName, setProjectName] = useState(() => t('应用操作录制'));
   const [selected, setSelected] = useState<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState('');
@@ -57,6 +62,7 @@ export function App() {
   const [doctorOpen, setDoctorOpen] = useState(false);
   const [doctorBusy, setDoctorBusy] = useState(false);
   const [doctor, setDoctor] = useState<DoctorReport | null>(null);
+  const [connectionFailure, setConnectionFailure] = useState<ConnectionDiagnostic | null>(null);
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [installing, setInstalling] = useState('');
   const [installNotice, setInstallNotice] = useState('');
@@ -122,7 +128,7 @@ export function App() {
         return next ? { ...old, deviceId: next.id } : old;
       });
     }
-    catch (cause) { setError(message(cause)); }
+    catch (cause) { setError(errorText(locale, cause)); }
     finally { if (manual) setDiscoveringDevices(false); }
   }, []);
   const refresh = useCallback(async () => {
@@ -135,7 +141,7 @@ export function App() {
       setStreamStatus('loading');
       setStreamNonce((value) => value + 1);
     }
-    catch (cause) { setError(message(cause)); }
+    catch (cause) { setError(errorText(locale, cause)); }
   }, [session]);
 
   useEffect(() => {
@@ -158,7 +164,7 @@ export function App() {
     const draft = loadDraft();
     if (draft) {
       setSteps(draft.steps);
-      setProjectName(draft.name);
+      setProjectName(DEFAULT_PROJECT_NAMES.has(draft.name) ? t('应用操作录制') : draft.name);
       setConfig(draft.config);
       setSettings(draft.settings);
       setRestoredAt(draft.savedAt);
@@ -178,6 +184,9 @@ export function App() {
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [draftReady, projectName, config, settings, steps]);
+  useEffect(() => {
+    setProjectName((current) => DEFAULT_PROJECT_NAMES.has(current) ? t('应用操作录制') : current);
+  }, [locale]);
   useEffect(() => { saveLayout(layout); }, [layout]);
   useEffect(() => {
     const onResize = () => setViewport(window.innerWidth);
@@ -350,7 +359,7 @@ export function App() {
         const snapshotValue = snapshot.value !== undefined && snapshot.value !== snapshot.placeholder ? snapshot.value : '';
         const value = secret && typed ? typed : snapshotValue || typed;
         if (!value) { typedBufferRef.current = ''; return null; }
-        const step: InputStep = { id: uid(), action: 'input', target: snapshot.target, value, clearFirst: true, secret, description: `输入「${maskInput(value)}」` };
+      const step: InputStep = { id: uid(), action: 'input', target: snapshot.target, value, clearFirst: true, secret, description: t('输入「{value}」', { value: maskInput(value) }) };
         setSteps((old) => withInputStep(old, step));
         return step;
       } catch { typedBufferRef.current = ''; return null; }
@@ -386,9 +395,9 @@ export function App() {
       keyQueueRef.current = keyQueueRef.current
         .then(() => window.studio.keys(payload))
         .then((result): void => {
-          if (active) setTypingNotice(result.typed ? '' : '当前没有聚焦的输入框，请先点击设备上的输入框');
+          if (active) setTypingNotice(result.typed ? '' : t('当前没有聚焦的输入框，请先点击设备上的输入框'));
         })
-        .catch((cause) => setError(message(cause)));
+        .catch((cause) => setError(errorText(locale, cause)));
     };
     const flushText = () => {
       if (keyFlushTimerRef.current !== null) { window.clearTimeout(keyFlushTimerRef.current); keyFlushTimerRef.current = null; }
@@ -464,25 +473,40 @@ export function App() {
     };
   }, [keyboard, session, replaying, picking, commitTyping, markTyping]);
 
-  const runTask = async (label: string, task: () => Promise<void>) => { setBusy(label); setError(''); try { await task(); } catch (cause) { setError(message(cause)); } finally { setBusy(''); } };
-  const refreshSourceTree = () => runTask('刷新控件树…', async () => {
-    if (!session) throw new Error('请先连接设备');
+  const runTask = async (label: string, task: () => Promise<void>) => { setBusy(label); setError(''); try { await task(); } catch (cause) { setError(errorText(locale, cause)); } finally { setBusy(''); } };
+  const openHelp = () => {
+    const help = window.open(locale === 'en-US' ? '/help.en.html' : '/help.html', '_blank', 'noopener,noreferrer');
+    if (help) help.opener = null;
+  };
+  const refreshSourceTree = () => runTask(t('刷新控件树…'), async () => {
+    if (!session) throw new Error(t('请先连接设备'));
     await window.studio.refreshSource();
   });
-  const connect = () => runTask('正在建立 Appium 会话…', async () => {
-    if (!config.deviceId) throw new Error('请选择设备或填写设备 UDID');
-    const chosen = devices.find((device) => device.id === config.deviceId);
-    if (chosen && chosen.status !== 'device') {
-      throw new Error(`设备当前不可用（${chosen.status}）：请解锁手机、信任电脑并重新连接 USB，或选择在线设备`);
+  const connect = () => runTask(t('正在建立 Appium 会话…'), async () => {
+    const platform = config.platform;
+    try {
+      if (!config.deviceId) throw new Error(t('请选择设备或填写设备 UDID'));
+      const chosen = devices.find((device) => device.id === config.deviceId);
+      if (chosen && chosen.status !== 'device') {
+        throw new Error(t('设备当前不可用（{status}）：请解锁手机、信任电脑并重新连接 USB，或选择在线设备', { status: chosen.status }));
+      }
+      setStreamStatus('loading');
+      const created = await window.studio.createSession(config);
+      // 会话建立后立刻抓一张首屏，手机画面挂载时就能显示，避免 scrcpy 黑首帧。
+      const shot = await window.studio.screenshot().catch(() => null);
+      setInitialShot(shot);
+      setSession(created);
+    } catch (cause) {
+      const report = await window.studio.doctor().catch(() => null);
+      if (report) {
+        setDoctor(report);
+        if (report.system) setSystem(report.system);
+      }
+      setConnectionFailure(buildConnectionDiagnostic(message(cause), report, platform, t));
+      throw cause;
     }
-    setStreamStatus('loading');
-    const created = await window.studio.createSession(config);
-    // 会话建立后立刻抓一张首屏，手机画面挂载时就能显示，避免 scrcpy 黑首帧。
-    const shot = await window.studio.screenshot().catch(() => null);
-    setInitialShot(shot);
-    setSession(created);
   });
-  const disconnect = () => runTask('正在断开…', async () => { resetTyping(); await window.studio.closeSession(); setSession(null); setInitialShot(null); setStreamStatus('idle'); });
+  const disconnect = () => runTask(t('正在断开…'), async () => { resetTyping(); await window.studio.closeSession(); setSession(null); setInitialShot(null); setStreamStatus('idle'); });
   const openAttachDialog = () => {
     setAttachUrl('http://127.0.0.1:4723');
     setAttachSessionId('');
@@ -596,7 +620,7 @@ export function App() {
     void runTask('执行滑动…', async () => {
       await commitTyping();
       await window.studio.swipe(direction, duration, start, end);
-      if (recording) setSteps((old) => [...old, { id: uid(), action: 'swipe', direction, duration, start, end, description: `${directionName(direction)}滑 ${distance}px` }]);
+      if (recording) setSteps((old) => [...old, { id: uid(), action: 'swipe', direction, duration, start, end, description: t('{direction}滑 {distance}px', { direction: t(directionName(direction)), distance }) }]);
     });
     setTimeout(() => { suppressTapRef.current = false; }, 0);
   };
@@ -622,7 +646,7 @@ export function App() {
     const points = defaultSwipePoints(direction, session.width, session.height);
     const distance = Math.round(Math.hypot(points.end.x - points.start.x, points.end.y - points.start.y));
     await window.studio.swipe(direction, 520, points.start, points.end);
-    if (recording) setSteps((old) => [...old, { id: uid(), action: 'swipe', direction, duration: 520, start: points.start, end: points.end, description: `${directionName(direction)}滑 ${distance}px` }]);
+    if (recording) setSteps((old) => [...old, { id: uid(), action: 'swipe', direction, duration: 520, start: points.start, end: points.end, description: t('{direction}滑 {distance}px', { direction: t(directionName(direction)), distance }) }]);
   });
   const addBack = () => runTask('执行返回…', async () => { await commitTyping(); await window.studio.back(); if (recording) setSteps((old) => [...old, { id: uid(), action: 'back', description: '返回上一页' }]); });
   const runGesture = (gesture: 'doubleTap' | 'longPress' | 'pinchOut' | 'pinchIn') => runTask('执行手势…', async () => {
@@ -889,6 +913,11 @@ export function App() {
     setSettingsNotice('');
     setSettingsError('');
   };
+  useEffect(() => {
+    const open = () => openSettings();
+    window.addEventListener('echobench:open-settings', open);
+    return () => window.removeEventListener('echobench:open-settings', open);
+  }, []);
   const saveGlobalAiConfig = () => {
     setSettingsNotice('');
     setSettingsError('');
@@ -896,7 +925,8 @@ export function App() {
       const saved = saveAiConfig(settingsConfig);
       setSettingsConfig(saved);
       setAiConfig(saved);
-      setSettingsNotice('AI 配置已保存到当前浏览器');
+      setSettingsNotice(t('设置已保存'));
+      setSettingsOpen(false);
     } catch (cause) { setSettingsError(message(cause)); }
   };
   const testGlobalAiConfig = async () => {
@@ -908,9 +938,9 @@ export function App() {
       const result = await window.studio.testAiConnection(config);
       if (result.ok) {
         const detail = result.message && !/^ok$/i.test(result.message.trim()) ? ` · ${result.message}` : '';
-        setSettingsNotice(`连接成功 · ${result.model} · ${result.latency} ms${detail}`);
+        setSettingsNotice(t('连接成功 · {model} · {latency} ms{detail}', { model: result.model, latency: result.latency, detail }));
       } else {
-        setSettingsError(`连接失败：${result.message}`);
+        setSettingsError(t('连接失败：{message}', { message: result.message }));
       }
     } catch (cause) { setSettingsError(message(cause)); }
     finally { setSettingsTesting(false); }
@@ -933,14 +963,14 @@ export function App() {
     setAiError('');
     setAiNotice('');
     try {
-      if (!aiTitle.trim()) throw new Error('请填写用例标题');
+      if (!aiTitle.trim()) throw new Error(t('请填写用例标题'));
       const config = normalizeAiConfig(loadAiConfig());
       setAiConfig(config);
       const committed = await commitTyping();
       const current = committed ? { ...script, steps: withInputStep(script.steps, committed) } : script;
       const filename = await window.studio.exportAiCase(current, config, aiTitle.trim());
-      setAiNotice(`已导出 ${filename}`);
-    } catch (cause) { setAiError(message(cause)); }
+      if (filename) setAiNotice(t('已导出 {filename}', { filename }));
+    } catch (cause) { setAiError(errorText(locale, cause)); }
     finally { setAiBusy(false); }
   };
   const openDoctor = async () => {
@@ -960,15 +990,18 @@ export function App() {
     if (installing) return;
     const name = doctor?.checks.find((check) => check.id === id)?.name ?? id;
     setInstalling(id);
-    setInstallNotice(`正在安装 ${name}…`);
+    setInstallNotice(t('正在安装 {name}…', { name }));
     setInstallError('');
     try {
       const result = await window.studio.installDependency(id);
-      if (result.ok) setInstallNotice(`${name} 安装完成`);
-      else if (result.manual) setInstallNotice(`${name} 需要手动完成：${result.manual}`);
+      if (result.ok) setInstallNotice(t('{name} 安装完成', { name }));
+      else if (result.manual) setInstallNotice(t('{name} 需要手动完成：{manual}', { name, manual: result.manual }));
       else {
         setInstallNotice('');
-        setInstallError(`${name} 安装未完成${result.needsRestart ? '，请重启应用后重新检查' : '，请查看运行日志'}`);
+        setInstallError(t('{name} 安装未完成{restart}', {
+          name,
+          restart: result.needsRestart ? t('，请重启应用后重新检查') : t('，请查看运行日志'),
+        }));
       }
       const report = await window.studio.doctor();
       setDoctor(report);
@@ -1006,7 +1039,7 @@ export function App() {
             localStorage.setItem('echobench:auto-install-at', String(Date.now()));
             localStorage.removeItem('app-step-studio:auto-install-at');
           } catch { /* 忽略存储异常；无法记录时仍允许本次自动安装。 */ }
-          setInstallNotice(`检测到缺少 ${candidates.length} 项基础依赖，正在自动安装；首次安装可能需要几分钟…`);
+          setInstallNotice(t('检测到缺少 {count} 项基础依赖，正在自动安装；首次安装可能需要几分钟…', { count: candidates.length }));
           for (const id of candidates) await installDependency(id);
         } catch { /* 环境检查失败不阻塞录制，用户仍可手动打开体检。 */ }
       })();
@@ -1053,11 +1086,11 @@ export function App() {
     setEditLocator(null);
     if (stepId) setDebugResults((old) => { const next = { ...old }; delete next[stepId]; return next; });
   };
-  const play = (startIndex = 0) => runTask(startIndex > 0 ? `从第 ${startIndex + 1} 步开始回放…` : '正在回放…', async () => {
-    if (!session) throw new Error('请先连接设备');
+  const play = (startIndex = 0) => runTask(startIndex > 0 ? t('从第 {step} 步开始回放…', { step: startIndex + 1 }) : t('正在回放…'), async () => {
+    if (!session) throw new Error(t('请先连接设备'));
     const committed = await commitTyping();
     const replayed = committed ? { ...script, steps: withInputStep(script.steps, committed) } : script;
-    if (replayed.steps.length === 0) throw new Error('没有可回放的步骤');
+    if (replayed.steps.length === 0) throw new Error(t('没有可回放的步骤'));
     const start = Math.max(0, Math.min(startIndex, replayed.steps.length - 1));
     const wasRecording = recording;
     replayActiveRef.current = true;
@@ -1075,8 +1108,8 @@ export function App() {
       setReplay({ total: report.results.length, startIndex: report.startIndex ?? start, startedAt: report.startedAt, finishedAt: report.finishedAt, duration: report.duration, status: report.status, results: Object.fromEntries(report.results.map((result) => [result.index, result])) });
       if (report.status === 'failed') {
         const failed = report.results.find((result) => result.status === 'failed');
-        const hint = failed?.index === start ? '；请确认设备已处于该步骤开始前的页面状态，必要时点“刷新控件树”后重试' : '';
-        setError(failed ? `第 ${failed.index + 1} 步失败：${failed.message ?? '未知错误'}${hint}` : '回放失败');
+        const hint = failed?.index === start ? t('；请确认设备已处于该步骤开始前的页面状态，必要时点“刷新控件树”后重试') : '';
+        setError(failed ? t('第 {step} 步失败：{message}{hint}', { step: failed.index + 1, message: failed.message ?? t('未知错误'), hint }) : t('回放失败'));
       }
     } finally {
       replayActiveRef.current = false;
@@ -1088,104 +1121,106 @@ export function App() {
     <textarea ref={captureRef} className="keyboard-capture" tabIndex={-1} spellCheck={false} autoComplete="off" autoCapitalize="off" autoCorrect="off" />
     <header className="topbar">
       <div className="brand"><span className="brand-mark"><EchoMark /></span><div><strong>ECHOBENCH</strong><span>MOBILE TEST STUDIO</span></div>{appInfo && <span className="brand-version" title={appInfo.releaseUrl}>v{appInfo.version}</span>}</div>
-      <div className="project-title"><span>当前项目</span><b>{projectName}</b><i className={session ? 'online' : ''}>{session ? '设备已连接' : '等待设备'}</i></div>
+      <div className="project-title"><span>{t('当前项目')}</span><b>{projectName}</b><i className={session ? 'online' : ''}>{session ? t('设备已连接') : t('等待设备')}</i></div>
       <div className="toolbar">
-        <button className="multi-entry" onClick={() => setMultiOpen(true)} title="多台设备实时画面与同步操作">
-          <MonitorSmartphone /><span>多端同步</span><em>{onlineDeviceCount} 台在线</em>
+        <button className="multi-entry" onClick={() => setMultiOpen(true)} title={t('多台设备实时画面与同步操作')}>
+          <MonitorSmartphone /><span>{t('多端同步')}</span><em>{t('{count} 台在线', { count: onlineDeviceCount })}</em>
         </button>
         <span className="toolbar-sep" />
         <div className="toolbar-group">
-          <button onClick={open}><FolderOpen />载入</button><button onClick={save} disabled={!steps.length}><Save />保存 YAML</button>
+          <button onClick={open} title={t('载入脚本')}><FolderOpen />{t('载入')}</button><button onClick={save} disabled={!steps.length} title={t('保存脚本')}><Save />{t('保存 YAML')}</button>
         </div>
         <span className="toolbar-sep" />
         <div className="toolbar-group">
-          <button onClick={openAiDialog} title="使用全局 AI 配置导出 CSV 测试用例"><Sparkles />AI 用例</button>
-          <button onClick={openSettings} title="全局设置"><Settings2 />设置</button>
+          <button onClick={openAiDialog} title={t('使用全局 AI 配置导出 CSV 测试用例')}><Sparkles />{t('AI 用例')}</button>
+          <button onClick={() => setLocale(locale === 'zh-CN' ? 'en-US' : 'zh-CN')} title={locale === 'zh-CN' ? 'Switch to English' : '切换到中文'}><Languages />{locale === 'zh-CN' ? 'EN' : '中文'}</button>
+          <button onClick={openSettings} title={t('全局设置')}><Settings2 />{t('设置')}</button>
         </div>
         <span className="toolbar-sep" />
         <div className="toolbar-group">
           <div className="export-menu" onMouseLeave={() => setExportOpen(false)}>
-            <button className="export-toggle" onClick={() => setExportOpen(!exportOpen)} disabled={!steps.length}><Code2 />导出脚本<ChevronDown /></button>
+            <button className="export-toggle" onClick={() => setExportOpen(!exportOpen)} disabled={!steps.length} title={t('导出脚本为 WebdriverIO、Python 或 Java')}><Code2 />{t('导出脚本')}<ChevronDown /></button>
             {exportOpen && <div className="export-list">
               <button onClick={() => { setExportOpen(false); void exportJs(); }} disabled={!steps.length}>WebdriverIO JS</button>
               <button onClick={() => { setExportOpen(false); void exportPython(); }} disabled={!steps.length}>Python (Appium)</button>
               <button onClick={() => { setExportOpen(false); void exportJava(); }} disabled={!steps.length}>Java (Appium)</button>
             </div>}
           </div>
-          <button onClick={() => void openLogs()} title="查看运行日志和 Appium/WDA 报错"><FileText />日志</button>
-          <button onClick={() => void openDoctor()}><Stethoscope />体检</button>
+          <button onClick={() => void openLogs()} title={t('查看运行日志和 Appium/WDA 报错')}><FileText />{t('日志')}</button>
+          <button onClick={() => void openDoctor()} title={t('检查应用运行所需的系统和移动设备环境')}><Stethoscope />{t('体检')}</button>
+          <button onClick={openHelp} title={t('查看 Windows、macOS、Linux 的安装与配置帮助')}><CircleHelp />{t('帮助')}</button>
         </div>
         <span className="toolbar-sep" />
-        <button className="play" onClick={() => play(0)} disabled={!steps.length || !session || Boolean(busy)}><Play />回放</button>
+        <button className="play" onClick={() => play(0)} disabled={!steps.length || !session || Boolean(busy)} title={t('回放当前录制步骤')}><Play />{t('回放')}</button>
       </div>
     </header>
 
     <section className="workspace" style={{ '--steps-width': `${layout.steps}px`, '--inspector-width': `${layout.inspector}px` } as unknown as React.CSSProperties}>
       <aside className="device-panel panel">
-        <PanelTitle index="01" title="设备与应用" icon={<Smartphone />} />
-        <div className="platform-switch"><button className={config.platform === 'android' ? 'active' : ''} onClick={() => setConfig((old) => ({ ...old, platform: 'android', deviceId: devices.find((d) => d.platform === 'android' && d.status === 'device')?.id ?? old.deviceId }))}>ANDROID</button><button className={config.platform === 'ios' ? 'active' : ''} disabled={!iosSupported} title={iosSupported ? undefined : '当前操作系统不支持 iOS 自动化，仅 macOS 支持'} onClick={() => setConfig((old) => ({ ...old, platform: 'ios', deviceId: devices.find((d) => d.platform === 'ios' && d.status === 'device')?.id ?? old.deviceId, xcodeSigningId: old.xcodeSigningId || 'Apple Development' }))}>iOS</button></div>
-        {system && !system.capabilities.ios && <p className="platform-warning">当前系统为 {system.osName}，仅支持 Android 自动化；iOS 相关功能已禁用。</p>}
-        <label>设备<select value={config.deviceId} onChange={(e) => setConfig({ ...config, deviceId: e.target.value })}><option value="">选择或输入 UDID</option>{filteredDevices.map((d) => <option key={d.id} value={d.id} disabled={d.status !== 'device'}>{d.name} · {d.status}</option>)}</select></label>
+        <PanelTitle index="01" title={t('设备与应用')} icon={<Smartphone />} />
+        <div className="platform-switch"><button className={config.platform === 'android' ? 'active' : ''} onClick={() => setConfig((old) => ({ ...old, platform: 'android', deviceId: devices.find((d) => d.platform === 'android' && d.status === 'device')?.id ?? old.deviceId }))}>ANDROID</button><button className={config.platform === 'ios' ? 'active' : ''} disabled={!iosSupported} title={iosSupported ? undefined : t('当前操作系统不支持 iOS 自动化，仅 macOS 支持')} onClick={() => setConfig((old) => ({ ...old, platform: 'ios', deviceId: devices.find((d) => d.platform === 'ios' && d.status === 'device')?.id ?? old.deviceId, xcodeSigningId: old.xcodeSigningId || 'Apple Development' }))}>iOS</button></div>
+        {system && !system.capabilities.ios && <p className="platform-warning">{t('当前系统为 {os}，仅支持 Android 自动化；iOS 相关功能已禁用。', { os: system.osName })}</p>}
+        <label>{t('设备')}<select value={config.deviceId} onChange={(e) => setConfig({ ...config, deviceId: e.target.value })}><option value="">{t('选择或输入 UDID')}</option>{filteredDevices.map((d) => <option key={d.id} value={d.id} disabled={d.status !== 'device'}>{d.name} · {d.status}</option>)}</select></label>
         <div className="device-scan-meta">
           <span className="scan-dot" />
-          <span>自动发现 · {onlineDeviceCount} 台在线</span>
+          <span>{t('自动发现 · {count} 台在线', { count: onlineDeviceCount })}</span>
           {lastDeviceScan && <em>{new Date(lastDeviceScan).toLocaleTimeString()}</em>}
         </div>
-        {currentDeviceMissing && <p className="device-warning">当前设备已离线或已拔出，请重新连接设备，或点击“发现设备”后选择其他设备。</p>}
-        <label>设备 UDID<input value={config.deviceId} onChange={(e) => setConfig({ ...config, deviceId: e.target.value })} placeholder="emulator-5554 / iPhone UDID" /></label>
-        <label>应用路径（可选）<input value={config.app ?? ''} onChange={(e) => setConfig({ ...config, app: e.target.value })} placeholder="/path/to/app.apk" /></label>
+        {currentDeviceMissing && <p className="device-warning">{t('当前设备已离线或已拔出，请重新连接设备，或点击“发现设备”后选择其他设备。')}</p>}
+        <label>{t('设备 UDID')}<input value={config.deviceId} onChange={(e) => setConfig({ ...config, deviceId: e.target.value })} placeholder="emulator-5554 / iPhone UDID" /></label>
+        <label>{t('应用路径（可选）')}<input value={config.app ?? ''} onChange={(e) => setConfig({ ...config, app: e.target.value })} placeholder="/path/to/app.apk" /></label>
         {config.platform === 'android' ? <><label>APP PACKAGE<input value={config.packageName ?? ''} onChange={(e) => setConfig({ ...config, packageName: e.target.value })} placeholder="com.example.app" /></label><label>APP ACTIVITY<input value={config.activity ?? ''} onChange={(e) => setConfig({ ...config, activity: e.target.value })} placeholder=".MainActivity" /></label></> : <>
-          <label>BUNDLE ID<input value={config.bundleId ?? ''} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, bundleId: e.target.value })} placeholder="com.example.app" /></label>
-          <label>XCODE TEAM ID<input value={config.xcodeOrgId ?? ''} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, xcodeOrgId: e.target.value })} placeholder="例如 9M49ULVKP2" /></label>
-          <label>签名身份<input value={config.xcodeSigningId ?? ''} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, xcodeSigningId: e.target.value })} placeholder="Apple Development" /></label>
-          <label>WDA BUNDLE ID<input value={config.wdaBundleId ?? ''} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, wdaBundleId: e.target.value })} placeholder="com.example.WebDriverAgentRunner" /></label>
-          <label className="switch inline-switch" title="允许 Xcode 自动注册设备并更新签名"><input type="checkbox" checked={Boolean(config.allowProvisioning)} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, allowProvisioning: e.target.checked })} />自动注册设备/签名</label>
-          <p className="hint">iOS 真机必须填写 Team ID，并在 Xcode 登录对应 Apple 账号；模拟器可以留空。</p>
+          <label>{t('BUNDLE ID')}<input value={config.bundleId ?? ''} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, bundleId: e.target.value })} placeholder="com.example.app" /></label>
+          <label>{t('XCODE TEAM ID')}<input value={config.xcodeOrgId ?? ''} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, xcodeOrgId: e.target.value })} placeholder="9M49ULVKP2" /></label>
+          <label>{t('签名身份')}<input value={config.xcodeSigningId ?? ''} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, xcodeSigningId: e.target.value })} placeholder="Apple Development" /></label>
+          <label>{t('WDA BUNDLE ID')}<input value={config.wdaBundleId ?? ''} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, wdaBundleId: e.target.value })} placeholder="com.example.WebDriverAgentRunner" /></label>
+          <label className="switch inline-switch" title={t('允许 Xcode 自动注册设备并更新签名')}><input type="checkbox" checked={Boolean(config.allowProvisioning)} disabled={iosBlocked} onChange={(e) => setConfig({ ...config, allowProvisioning: e.target.checked })} />{t('自动注册设备/签名')}</label>
+          <p className="hint">{t('iOS 真机必须填写 Team ID，并在 Xcode 登录对应 Apple 账号；模拟器可以留空。')}</p>
         </>}
-        {iosBlocked && <p className="platform-warning">当前操作系统不支持 iOS 自动化，请切换到 Android，或改用 macOS。</p>}
-        <div className="connect-row"><button className="primary" onClick={session ? disconnect : connect} disabled={!session && iosBlocked} title={!session && iosBlocked ? '当前操作系统不支持 iOS 自动化' : undefined}>{session ? <><Unplug />{session.attached ? '脱离会话' : '断开设备'}</> : <><Radio />连接设备</>}</button><button className="discover" onClick={() => void refreshDevices(true)} disabled={discoveringDevices} title="立即扫描 USB 和局域网设备"><RefreshCw className={discoveringDevices ? 'spin' : ''} />{discoveringDevices ? '发现中…' : '发现设备'}</button></div>
-        <button className="attach-session" onClick={openAttachDialog} disabled={Boolean(busy)}><MonitorSmartphone />附加已有 Appium 会话</button>
+        {iosBlocked && <p className="platform-warning">{t('当前操作系统不支持 iOS 自动化，请切换到 Android，或改用 macOS。')}</p>}
+        <div className="connect-row"><button className="primary" onClick={session ? disconnect : connect} disabled={!session && iosBlocked} title={!session && iosBlocked ? t('当前操作系统不支持 iOS 自动化') : undefined}>{session ? <><Unplug />{session.attached ? t('脱离会话') : t('断开设备')}</> : <><Radio />{t('连接设备')}</>}</button><button className="discover" onClick={() => void refreshDevices(true)} disabled={discoveringDevices} title={t('立即扫描 USB 和局域网设备')}><RefreshCw className={discoveringDevices ? 'spin' : ''} />{discoveringDevices ? t('发现中…') : t('发现设备')}</button></div>
+        <button className="attach-session" onClick={openAttachDialog} disabled={Boolean(busy)}><MonitorSmartphone />{t('附加已有 Appium 会话')}</button>
         <div className="divider" />
-        <PanelTitle index="02" title="动作控制" icon={<Send />} />
-        <div className="input-action"><input value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && inputValue && !busy) { event.preventDefault(); void addInput(); } }} placeholder="选择目标后输入文本" /><button onClick={addInput} disabled={!session || !inputValue}><ChevronRight /></button></div>
+        <PanelTitle index="02" title={t('动作控制')} icon={<Send />} />
+        <div className="input-action"><input value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && inputValue && !busy) { event.preventDefault(); void addInput(); } }} placeholder={t('选择目标后输入文本')} /><button onClick={addInput} disabled={!session || !inputValue}><ChevronRight /></button></div>
         <div className="dpad"><button onClick={() => addGesture('up')}><ArrowUp /></button><button onClick={() => addGesture('left')}><ArrowLeft /></button><button className="back" onClick={addBack}><Undo2 /></button><button onClick={() => addGesture('right')}><ArrowRight /></button><button onClick={() => addGesture('down')}><ArrowDown /></button></div>
         <div className="gesture-row">
-          <button onClick={() => void runGesture('doubleTap')} disabled={!session || !selectedTarget} title="双击当前选中步骤的目标"><MousePointerClick />双击</button>
-          <button onClick={() => void runGesture('longPress')} disabled={!session || !selectedTarget} title="长按当前选中步骤的目标"><Hand />长按</button>
-          <button onClick={() => void runGesture('pinchOut')} disabled={!session} title="双指放大，优先作用于选中目标"><ZoomIn />放大</button>
-          <button onClick={() => void runGesture('pinchIn')} disabled={!session} title="双指缩小，优先作用于选中目标"><ZoomOut />缩小</button>
+          <button onClick={() => void runGesture('doubleTap')} disabled={!session || !selectedTarget} title={t('双击当前选中步骤的目标')}><MousePointerClick />{t('双击')}</button>
+          <button onClick={() => void runGesture('longPress')} disabled={!session || !selectedTarget} title={t('长按当前选中步骤的目标')}><Hand />{t('长按')}</button>
+          <button onClick={() => void runGesture('pinchOut')} disabled={!session} title={t('双指放大，优先作用于选中目标')}><ZoomIn />{t('放大')}</button>
+          <button onClick={() => void runGesture('pinchIn')} disabled={!session} title={t('双指缩小，优先作用于选中目标')}><ZoomOut />{t('缩小')}</button>
         </div>
-        <button className={`pick-toggle ${picking ? 'active' : ''}`} onClick={() => { setPicking(!picking); if (picking) { setPicked(null); setEditLocator(null); } }} disabled={!session} title="开启后点击设备画面只读取控件定位器，不会操作设备">
-          <Crosshair />{picking ? '拾取中：点击画面读取定位' : '开启元素拾取（不操作设备）'}
+        <button className={`pick-toggle ${picking ? 'active' : ''}`} onClick={() => { setPicking(!picking); if (picking) { setPicked(null); setEditLocator(null); } }} disabled={!session} title={t('开启后点击设备画面只读取控件定位器，不会操作设备')}>
+          <Crosshair />{picking ? t('拾取中：点击画面读取定位') : t('开启元素拾取（不操作设备）')}
         </button>
-        <button className="source-refresh" onClick={() => void refreshSourceTree()} disabled={!session || Boolean(busy)} title="iOS 页面切换后请刷新控件树，保证新页面定位器准确">
-          <RefreshCw />刷新控件树
+        <button className="source-refresh" onClick={() => void refreshSourceTree()} disabled={!session || Boolean(busy)} title={t('iOS 页面切换后请刷新控件树，保证新页面定位器准确')}>
+          <RefreshCw />{t('刷新控件树')}
         </button>
-        {config.platform === 'ios' && <p className="hint">录制点击时会在上一操作后自动刷新控件树，并用 Appium 实时校验主定位器；极少数动态页面仍可手动“刷新控件树”后重新拾取。</p>}
-        <p className="hint">点击设备画面会解析稳定控件定位器；按住并拖动会执行滑动并记录实际轨迹。先选中一个步骤，再用「双击/长按/放大/缩小」补齐手势。</p>
+        {config.platform === 'ios' && <p className="hint">{t('录制点击时会在上一操作后自动刷新控件树，并用 Appium 实时校验主定位器；极少数动态页面仍可手动“刷新控件树”后重新拾取。')}</p>}
+        <p className="hint">{t('点击设备画面会解析稳定控件定位器；按住并拖动会执行滑动并记录实际轨迹。先选中一个步骤，再用「双击/长按/放大/缩小」补齐手势。')}</p>
       </aside>
 
       <section className="mirror-panel panel">
-        <div className="mirror-head"><PanelTitle index="03" title="实时设备画面" icon={<Radio />} /><button onClick={refresh} disabled={!session}><RefreshCw />{session?.video === 'none' ? '刷新截图' : '重连画面'}</button></div>
+        <div className="mirror-head"><PanelTitle index="03" title={t('实时设备画面')} icon={<Radio />} /><button onClick={refresh} disabled={!session}><RefreshCw />{session?.video === 'none' ? t('刷新截图') : t('重连画面')}</button></div>
         <div className="stage">
           <div className="grid-lines" />
           {session ? <div className="phone" style={{ aspectRatio: `${session.width} / ${session.height}`, '--phone-ratio': String(session.width / session.height) } as unknown as React.CSSProperties}>
             <div className="speaker" />
             {session.video === 'none'
-              ? initialShot ? <img className="static-mirror" src={`data:image/png;base64,${initialShot}`} alt="附加会话截图" draggable={false} /> : <div className="static-mirror-empty"><RefreshCw /><span>附加会话暂无截图</span><button onClick={() => void refresh()} disabled={Boolean(busy)}>刷新截图</button></div>
+              ? initialShot ? <img className="static-mirror" src={`data:image/png;base64,${initialShot}`} alt={t('附加会话截图')} draggable={false} /> : <div className="static-mirror-empty"><RefreshCw /><span>{t('附加会话暂无截图')}</span><button onClick={() => void refresh()} disabled={Boolean(busy)}>{t('刷新截图')}</button></div>
               : session.platform === 'android'
                 ? <AndroidVideo key={`android-${streamNonce}`} nonce={streamNonce} initialShot={initialShot} setStreamStatus={setStreamStatus} setError={setError} />
                 : <IosVideo key={`ios-${streamNonce}`} nonce={streamNonce} setStreamStatus={setStreamStatus} setError={setError} />}
             <div className={`touch-layer ${picking ? 'picking' : ''}`} onClick={tapScreen} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag} />
             {picked?.target.bounds && <div className="pick-box" style={{ left: `${picked.target.bounds.x / session.width * 100}%`, top: `${picked.target.bounds.y / session.height * 100}%`, width: `${picked.target.bounds.width / session.width * 100}%`, height: `${picked.target.bounds.height / session.height * 100}%` }} />}
             {elementHighlight && <div className="element-highlight" style={{ left: `${elementHighlight.x / session.width * 100}%`, top: `${elementHighlight.y / session.height * 100}%`, width: `${elementHighlight.width / session.width * 100}%`, height: `${elementHighlight.height / session.height * 100}%` }} />}
-            {picking && <div className="pick-hint"><Crosshair />元素拾取中 · 点击画面只读取定位器</div>}
-            {streamStatus !== 'playing' && <div className="stream-state"><RefreshCw />{streamStatus === 'failed' ? '视频流连接失败，请重连画面' : '正在连接实时视频流…'}</div>}
-          </div> : <div className="empty-device"><Smartphone /><b>尚未连接设备</b><span>选择 {iosSupported ? 'Android 或 iOS' : 'Android'} 设备后建立 Appium 会话</span></div>}
+            {picking && <div className="pick-hint"><Crosshair />{t('元素拾取中 · 点击画面只读取定位器')}</div>}
+            {streamStatus !== 'playing' && <div className="stream-state"><RefreshCw />{streamStatus === 'failed' ? t('视频流连接失败，请重连画面') : t('正在连接实时视频流…')}</div>}
+          </div> : <div className="empty-device"><Smartphone /><b>{t('尚未连接设备')}</b><span>{t('选择 {platform} 设备后建立 Appium 会话', { platform: iosSupported ? 'Android / iOS' : 'Android' })}</span></div>}
           {replaying && runningStep
             ? <div className="replay-hud">
-                <div className="replay-hud-head"><span>{replay?.startIndex ? `从第 ${replay.startIndex + 1} 步` : '正在执行'}</span><b>{String(executedDone).padStart(2, '0')} / {String(executedTotal).padStart(2, '0')}</b></div>
-                <p>{actionNames[runningStep.action]} · {runningStep.description}</p>
+                <div className="replay-hud-head"><span>{replay?.startIndex ? t('从第 {step} 步', { step: replay.startIndex + 1 }) : t('正在执行')}</span><b>{String(executedDone).padStart(2, '0')} / {String(executedTotal).padStart(2, '0')}</b></div>
+                <p>{t(actionNames[runningStep.action])} · {runningStep.description}</p>
                 {activeActivity && <div className="replay-activity"><RefreshCw /><span>{activeActivity.message}</span><em>{formatDuration(activityElapsed)}</em></div>}
                 <div className="replay-bar"><i style={{ width: `${(executedDone / Math.max(1, executedTotal)) * 100}%` }} /></div>
               </div>
@@ -1195,38 +1230,38 @@ export function App() {
         <div className="statusbar">
           <span><i className={session ? 'green' : ''} />{session ? `${session.platform.toUpperCase()} · ${session.width} × ${session.height}` : 'OFFLINE'}</span>
           <div className="status-actions">
-            <button className={picking ? 'picking' : ''} onClick={() => { setPicking(!picking); if (picking) { setPicked(null); setEditLocator(null); } }} disabled={!session} title="开启后点击设备画面只读取控件定位器，不会操作设备"><Crosshair />{picking ? '拾取中' : '元素拾取'}</button>
-            <button className={keyboard ? 'keyboard' : ''} onClick={() => setKeyboard(!keyboard)} disabled={!session} title="开启后可以直接用电脑键盘向设备输入"><Keyboard />{keyboard ? '键盘已开启' : '键盘输入'}</button>
-            <button className={recording ? 'recording' : ''} onClick={() => { const next = !recording; setRecording(next); if (next && session) void window.studio.refreshSource().catch((cause) => setError(message(cause))); }}>{recording ? <CircleStop /> : <Radio />}{recording ? '停止记录' : '开始记录'}</button>
+            <button className={picking ? 'picking' : ''} onClick={() => { setPicking(!picking); if (picking) { setPicked(null); setEditLocator(null); } }} disabled={!session} title={t('开启后点击设备画面只读取控件定位器，不会操作设备')}><Crosshair />{picking ? t('拾取中') : t('元素拾取')}</button>
+            <button className={keyboard ? 'keyboard' : ''} onClick={() => setKeyboard(!keyboard)} disabled={!session} title={t('开启后可以直接用电脑键盘向设备输入')}><Keyboard />{keyboard ? t('键盘已开启') : t('键盘输入')}</button>
+            <button className={recording ? 'recording' : ''} onClick={() => { const next = !recording; setRecording(next); if (next && session) void window.studio.refreshSource().catch((cause) => setError(errorText(locale, cause))); }}>{recording ? <CircleStop /> : <Radio />}{recording ? t('停止记录') : t('开始记录')}</button>
           </div>
         </div>
       </section>
 
       <aside className="steps-panel panel">
-        <ColumnResizer width={layout.steps} min={layoutLimits.steps.min} max={maxStepsWidth} onChange={(steps) => setLayout((old) => ({ ...old, steps }))} onReset={() => setLayout((old) => ({ ...old, steps: defaultLayout.steps }))} label="调整步骤时间线宽度" />
-        <PanelTitle index="04" title="步骤时间线" icon={<FileInput />} />
-        <div className="steps-count"><b>{String(steps.length).padStart(2, '0')}</b><span>已记录步骤</span><button className="clear-record" onClick={requestClear} disabled={!steps.length || replaying || Boolean(busy)} title="清空当前记录并删除本地缓存"><Trash2 />清空</button></div>
-        {restoredAt && <div className="draft-note"><RefreshCw /><span>已恢复 {new Date(restoredAt).toLocaleTimeString()} 的缓存记录</span><button onClick={() => setRestoredAt(null)}>知道了</button></div>}
+        <ColumnResizer width={layout.steps} min={layoutLimits.steps.min} max={maxStepsWidth} onChange={(steps) => setLayout((old) => ({ ...old, steps }))} onReset={() => setLayout((old) => ({ ...old, steps: defaultLayout.steps }))} label={t('调整步骤时间线宽度')} />
+        <PanelTitle index="04" title={t('步骤时间线')} icon={<FileInput />} />
+        <div className="steps-count"><b>{String(steps.length).padStart(2, '0')}</b><span>{t('已记录步骤')}</span><button className="clear-record" onClick={requestClear} disabled={!steps.length || replaying || Boolean(busy)} title={t('清空当前记录并删除本地缓存')}><Trash2 />{t('清空')}</button></div>
+        {restoredAt && <div className="draft-note"><RefreshCw /><span>{t('已恢复 {time} 的缓存记录', { time: new Date(restoredAt).toLocaleTimeString() })}</span><button onClick={() => setRestoredAt(null)}>{t('知道了')}</button></div>}
         <details className="replay-settings">
-          <summary><Settings2 />回放策略<em>默认等待 {Math.round(settings.timeout / 1000)}s · 重试 {settings.retries}</em></summary>
+          <summary><Settings2 />{t('回放策略')}<em>{t('默认等待 {seconds}s · 重试 {retries}', { seconds: Math.round(settings.timeout / 1000), retries: settings.retries })}</em></summary>
           <div className="replay-settings-grid">
-            <label title="单个步骤等待控件/条件就绪的总上限，包含重试时间">单步等待上限（秒）<input type="number" min={1} max={120} value={Math.round(settings.timeout / 1000)} disabled={replaying} onChange={(event) => setSettings({ ...settings, timeout: clampNumber(event.target.value, 1, 120) * 1000 })} /></label>
-            <label title="仅用于输入/校验等可安全重试的动作失败；元素等待本身会持续轮询到上限">动作重试次数<input type="number" min={0} max={10} value={settings.retries} disabled={replaying} onChange={(event) => setSettings({ ...settings, retries: clampNumber(event.target.value, 0, 10) })} /></label>
-            <label>重试间隔（毫秒）<input type="number" min={0} max={10000} step={100} value={settings.retryDelay} disabled={replaying} onChange={(event) => setSettings({ ...settings, retryDelay: clampNumber(event.target.value, 0, 10000) })} /></label>
-            <label className="switch"><input type="checkbox" checked={settings.settle} disabled={replaying} onChange={(event) => setSettings({ ...settings, settle: event.target.checked })} />页面稳定等待</label>
-            <label className="switch" title="定位器找不到时是否点击记录的相对坐标（默认关闭，避免误点其他页面）"><input type="checkbox" checked={settings.coordinateFallback} disabled={replaying} onChange={(event) => setSettings({ ...settings, coordinateFallback: event.target.checked })} />坐标兜底</label>
-            <label className="switch" title="主定位失效时自动尝试录制时已验证唯一的候选定位器"><input type="checkbox" checked={settings.locatorFallback} disabled={replaying} onChange={(event) => setSettings({ ...settings, locatorFallback: event.target.checked })} />候选降级</label>
-            <label className="switch" title="回放前检查脚本配置的应用是否在前台"><input type="checkbox" checked={settings.requireApp} disabled={replaying} onChange={(event) => setSettings({ ...settings, requireApp: event.target.checked })} />校验前台应用</label>
-            <label className="switch"><input type="checkbox" checked={settings.stopOnFailure} disabled={replaying} onChange={(event) => setSettings({ ...settings, stopOnFailure: event.target.checked })} />失败即停</label>
+            <label title={t('单个步骤等待控件/条件就绪的总上限，包含重试时间')}>{t('单步等待上限（秒）')}<input type="number" min={1} max={120} value={Math.round(settings.timeout / 1000)} disabled={replaying} onChange={(event) => setSettings({ ...settings, timeout: clampNumber(event.target.value, 1, 120) * 1000 })} /></label>
+            <label title={t('仅用于输入/校验等可安全重试的动作失败；元素等待本身会持续轮询到上限')}>{t('动作重试次数')}<input type="number" min={0} max={10} value={settings.retries} disabled={replaying} onChange={(event) => setSettings({ ...settings, retries: clampNumber(event.target.value, 0, 10) })} /></label>
+            <label>{t('重试间隔（毫秒）')}<input type="number" min={0} max={10000} step={100} value={settings.retryDelay} disabled={replaying} onChange={(event) => setSettings({ ...settings, retryDelay: clampNumber(event.target.value, 0, 10000) })} /></label>
+            <label className="switch"><input type="checkbox" checked={settings.settle} disabled={replaying} onChange={(event) => setSettings({ ...settings, settle: event.target.checked })} />{t('页面稳定等待')}</label>
+            <label className="switch" title={t('定位器找不到时是否点击记录的相对坐标（默认关闭，避免误点其他页面）')}><input type="checkbox" checked={settings.coordinateFallback} disabled={replaying} onChange={(event) => setSettings({ ...settings, coordinateFallback: event.target.checked })} />{t('坐标兜底')}</label>
+            <label className="switch" title={t('主定位失效时自动尝试录制时已验证唯一的候选定位器')}><input type="checkbox" checked={settings.locatorFallback} disabled={replaying} onChange={(event) => setSettings({ ...settings, locatorFallback: event.target.checked })} />{t('候选降级')}</label>
+            <label className="switch" title={t('回放前检查脚本配置的应用是否在前台')}><input type="checkbox" checked={settings.requireApp} disabled={replaying} onChange={(event) => setSettings({ ...settings, requireApp: event.target.checked })} />{t('校验前台应用')}</label>
+            <label className="switch"><input type="checkbox" checked={settings.stopOnFailure} disabled={replaying} onChange={(event) => setSettings({ ...settings, stopOnFailure: event.target.checked })} />{t('失败即停')}</label>
           </div>
         </details>
         {replay && <div className={`replay-summary ${replay.status}`}>
-          <span>{replay.status === 'running' ? '回放中' : replay.status === 'failed' ? '回放失败' : '回放完成'}</span>
+          <span>{replay.status === 'running' ? t('回放中') : replay.status === 'failed' ? t('回放失败') : t('回放完成')}</span>
           <b>{passedCount} / {executedTotal}</b>
           <em>{replay.status === 'running'
-            ? `${replay.startIndex ? `从第 ${replay.startIndex + 1} 步 · ` : ''}${activeActivity?.message ?? (runningIndex !== null && runningStep ? `正在执行 ${runningIndex + 1}：${runningStep.description}` : '准备执行…')}`
-            : replay.status === 'failed' && failedResult ? `第 ${failedResult.index + 1} 步失败${failedResult.retried ? `（重试 ${failedResult.retried} 次）` : ''}：${failedResult.message ?? '未知错误'}`
-            : `${replay.startIndex ? `从第 ${replay.startIndex + 1} 步 · ` : ''}耗时 ${formatDuration(replay.duration)}${totalRetries ? ` · 重试 ${totalRetries} 次` : ''}`}</em>
+            ? `${replay.startIndex ? `${t('从第 {step} 步', { step: replay.startIndex + 1 })} · ` : ''}${activeActivity?.message ?? (runningIndex !== null && runningStep ? t('正在执行 {step}：{description}', { step: runningIndex + 1, description: runningStep.description }) : t('准备执行…'))}`
+            : replay.status === 'failed' && failedResult ? t('第 {step} 步失败{retry}：{message}', { step: failedResult.index + 1, retry: failedResult.retried ? t('（重试 {count} 次）', { count: failedResult.retried }) : '', message: failedResult.message ?? t('未知错误') })
+            : `${replay.startIndex ? `${t('从第 {step} 步', { step: replay.startIndex + 1 })} · ` : ''}${t('耗时 {duration}', { duration: formatDuration(replay.duration) })}${totalRetries ? t(' · 重试 {count} 次', { count: totalRetries }) : ''}`}</em>
         </div>}
         <div className="timeline">{steps.length ? steps.map((step, index) => {
           const result = replayResults[index];
@@ -1237,43 +1272,43 @@ export function App() {
             ref={(element) => { stepRefs.current[index] = element; }}
             draggable={!replaying && !busy}
             className={`step ${selected === index ? 'selected' : ''} ${result?.status ?? ''} ${runningIndex === index ? 'current' : ''} ${dragIndex === index ? 'dragging' : ''} ${dragOverIndex === index && dragIndex !== null ? 'drag-over' : ''}`}
-            title={[debug?.message ?? result?.message, warning, '拖动可排序'].filter(Boolean).join(' · ')}
+            title={[debug?.message ?? result?.message, warning, t('拖动可排序')].filter(Boolean).join(' · ')}
             onClick={() => { setSelected(index); setPicked(null); setEditLocator(null); setNoteEdit(null); }}
             onDragStart={(event) => { if (replaying || busy) { event.preventDefault(); return; } setDragIndex(index); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(index)); }}
             onDragOver={(event) => { if (dragIndex === null) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDragOverIndex(index); }}
             onDrop={(event) => { event.preventDefault(); if (dragIndex !== null) moveStep(dragIndex, index); setDragIndex(null); setDragOverIndex(null); }}
             onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
-          ><span className="step-index">{String(index + 1).padStart(2, '0')}</span><span className="step-body"><span className="step-title"><GripVertical /><b>{actionNames[step.action]}</b></span><small>{step.description}</small>{warning && <small className="step-warning">定位风险</small>}{step.note && <small className="step-note">备注：{step.note}</small>}{debug ? <em className={debug.status}>调试 · {debugLabel(debug)}</em> : result && <em className={result.status}>{runningIndex === index && activeActivity ? activeActivity.message : resultLabel(result)}</em>}</span><i /></button>;
-        }) : <div className="empty-steps">操作设备后，步骤会出现在这里。</div>}</div>
+          ><span className="step-index">{String(index + 1).padStart(2, '0')}</span><span className="step-body"><span className="step-title"><GripVertical /><b>{t(actionNames[step.action])}</b></span><small>{localizeGeneratedText(locale, step.description)}</small>{warning && <small className="step-warning">{t('定位风险')}</small>}{step.note && <small className="step-note">{t('备注：{note}', { note: step.note })}</small>}{debug ? <em className={debug.status}>{t('调试 · {status}', { status: debugLabel(debug, t) })}</em> : result && <em className={result.status}>{runningIndex === index && activeActivity ? activeActivity.message : resultLabel(result, t)}</em>}</span><i /></button>;
+        }) : <div className="empty-steps">{t('操作设备后，步骤会出现在这里。')}</div>}</div>
       </aside>
 
       <aside className="inspector-panel panel">
-        <ColumnResizer width={layout.inspector} min={layoutLimits.inspector.min} max={maxInspectorWidth} onChange={(inspector) => setLayout((old) => ({ ...old, inspector }))} onReset={() => setLayout((old) => ({ ...old, inspector: defaultLayout.inspector }))} label="调整目标检查器宽度" />
-        <PanelTitle index="05" title="目标检查器" icon={<MousePointerClick />} />
+        <ColumnResizer width={layout.inspector} min={layoutLimits.inspector.min} max={maxInspectorWidth} onChange={(inspector) => setLayout((old) => ({ ...old, inspector }))} onReset={() => setLayout((old) => ({ ...old, inspector: defaultLayout.inspector }))} label={t('调整目标检查器宽度')} />
+        <PanelTitle index="05" title={t('目标检查器')} icon={<MousePointerClick />} />
         <div className="inspector-tabs">
-          <button className={inspectorMode === 'target' ? 'active' : ''} onClick={() => { setInspectorMode('target'); setElementHighlight(null); }}>目标</button>
-          <button className={inspectorMode === 'tree' ? 'active' : ''} disabled={!session} onClick={() => setInspectorMode('tree')}>元素树</button>
+          <button className={inspectorMode === 'target' ? 'active' : ''} onClick={() => { setInspectorMode('target'); setElementHighlight(null); }}>{t('目标')}</button>
+          <button className={inspectorMode === 'tree' ? 'active' : ''} disabled={!session} onClick={() => setInspectorMode('tree')}>{t('元素树')}</button>
         </div>
         {inspectorMode === 'tree' ? <ElementTreePanel session={session} onHighlight={setElementHighlight} /> : <>
         {picked ? <div className="inspector-body">
           <div className="inspector-head">
-            <b>拾取结果 · {picked.target.label || '目标'}</b>
+            <b>{t('拾取结果 · {label}', { label: picked.target.label || t('目标') })}</b>
             <div className="inspector-actions">
-              <button title="编辑定位器" onClick={() => startEditLocator('picked', picked.target)} disabled={!picked.target.locator || Boolean(busy)}><Pencil /></button>
-              <button title="清除拾取结果" onClick={() => { setPicked(null); setEditLocator(null); }}><XCircle /></button>
+              <button title={t('编辑定位器')} onClick={() => startEditLocator('picked', picked.target)} disabled={!picked.target.locator || Boolean(busy)}><Pencil /></button>
+              <button title={t('清除拾取结果')} onClick={() => { setPicked(null); setEditLocator(null); }}><XCircle /></button>
             </div>
           </div>
           {editLocator?.mode === 'picked' ? <LocatorEditor value={editLocator} onApply={applyLocatorEdit} onCancel={() => setEditLocator(null)} /> : <>
             {picked.target.locator ? <>
-              <KeyValue name="策略" value={picked.target.locator.strategy} />
-              <KeyValue name="定位值" value={picked.target.locator.value} copy={picked.target.locator.value} />
-            </> : <KeyValue name="定位" value="仅坐标（未找到语义节点）" />}
+              <KeyValue name={t('策略')} value={picked.target.locator.strategy} />
+              <KeyValue name={t('定位值')} value={picked.target.locator.value} copy={picked.target.locator.value} />
+            </> : <KeyValue name={t('定位')} value={t('仅坐标（未找到语义节点）')} />}
             {labelEdit?.mode === 'picked'
               ? <LabelEditor value={labelEdit.value} onChange={(value) => setLabelEdit({ mode: 'picked', value })} onApply={applyLabelEdit} onCancel={() => setLabelEdit(null)} />
-              : <KeyValue name="标签" value={picked.target.label ?? '—'} copy={picked.target.label} onEdit={() => startEditLabel('picked', picked.target)} />}
-            <KeyValue name="坐标" value={`${picked.x}, ${picked.y}`} />
+              : <KeyValue name={t('标签')} value={picked.target.label ?? '—'} copy={picked.target.label} onEdit={() => startEditLabel('picked', picked.target)} />}
+            <KeyValue name={t('坐标')} value={`${picked.x}, ${picked.y}`} />
             {picked.target.warning && <p className="target-warning">{picked.target.warning}</p>}
-            {!picked.target.locator && <p className="pick-warning">该元素未出现在无障碍控件树中（可能是自定义绘制或未设置 contentDescription），Appium 无法生成语义定位器，只能按坐标点击。可以先编辑标签，再添加为坐标点击步骤；如需稳定定位器，请让开发补充 contentDescription 或 resource-id。</p>}
+            {!picked.target.locator && <p className="pick-warning">{t('该元素未出现在无障碍控件树中（可能是自定义绘制或未设置 contentDescription），Appium 无法生成语义定位器，只能按坐标点击。可以先编辑标签，再添加为坐标点击步骤；如需稳定定位器，请让开发补充 contentDescription 或 resource-id。')}</p>}
             {session && <AssertionBar
               condition={assertCondition}
               expect={assertExpect}
@@ -1285,45 +1320,45 @@ export function App() {
               busy={Boolean(busy)}
             />}
             <div className="picked-actions">
-              <button className="primary" onClick={addPickedStep}><Play />{picked.target.locator ? '添加为点击步骤' : '添加为坐标点击步骤'}</button>
-              <button onClick={() => { setPicked(null); setEditLocator(null); }}>关闭结果</button>
+              <button className="primary" onClick={addPickedStep}><Play />{picked.target.locator ? t('添加为点击步骤') : t('添加为坐标点击步骤')}</button>
+              <button onClick={() => { setPicked(null); setEditLocator(null); }}>{t('关闭结果')}</button>
             </div>
             {picked.target.candidates?.length ? <CandidateList target={picked.target} busy={Boolean(busy)} onChoose={(locator) => setPicked({ ...picked, target: { ...picked.target, locator } })} onVerify={verifyPicked} /> : null}
           </>}
         </div> : selectedStep ? <div className="inspector-body">
           <div className="inspector-head">
-            <b>{selectedStep.description}</b>
+            <b>{localizeGeneratedText(locale, selectedStep.description)}</b>
             <div className="inspector-actions">
-              <button title="按记录坐标重新识别元素" onClick={() => void reanalyzeSelected()} disabled={!session || !selectedTarget?.coordinate || Boolean(busy)}><Crosshair /></button>
-              <button title="编辑定位器" onClick={() => selectedTarget && startEditLocator('step', selectedTarget)} disabled={!selectedTarget?.locator || Boolean(busy)}><Pencil /></button>
-              <button title="关闭检查器" onClick={() => setSelected(null)}><XCircle /></button>
-              <button title="删除此步骤" onClick={deleteSelected}><Trash2 /></button>
+              <button title={t('按记录坐标重新识别元素')} onClick={() => void reanalyzeSelected()} disabled={!session || !selectedTarget?.coordinate || Boolean(busy)}><Crosshair /></button>
+              <button title={t('编辑定位器')} onClick={() => selectedTarget && startEditLocator('step', selectedTarget)} disabled={!selectedTarget?.locator || Boolean(busy)}><Pencil /></button>
+              <button title={t('关闭检查器')} onClick={() => setSelected(null)}><XCircle /></button>
+              <button title={t('删除此步骤')} onClick={deleteSelected}><Trash2 /></button>
             </div>
           </div>
           {editLocator?.mode === 'step' ? <LocatorEditor value={editLocator} onApply={applyLocatorEdit} onCancel={() => setEditLocator(null)} /> : selectedTarget ? <>
-            <KeyValue name="策略" value={selectedTarget.locator?.strategy ?? '相对坐标'} />
-            <KeyValue name="定位值" value={selectedTarget.locator?.value ?? `${selectedTarget.coordinate?.xRatio}, ${selectedTarget.coordinate?.yRatio}`} copy={selectedTarget.locator?.value} />
+            <KeyValue name={t('策略')} value={selectedTarget.locator?.strategy ?? t('相对坐标')} />
+            <KeyValue name={t('定位值')} value={selectedTarget.locator?.value ?? `${selectedTarget.coordinate?.xRatio}, ${selectedTarget.coordinate?.yRatio}`} copy={selectedTarget.locator?.value} />
             {labelEdit?.mode === 'step'
               ? <LabelEditor value={labelEdit.value} onChange={(value) => setLabelEdit({ mode: 'step', value })} onApply={applyLabelEdit} onCancel={() => setLabelEdit(null)} />
-              : <KeyValue name="标签" value={selectedTarget.label ?? '—'} copy={selectedTarget.label} onEdit={() => startEditLabel('step', selectedTarget)} />}
+              : <KeyValue name={t('标签')} value={selectedTarget.label ?? '—'} copy={selectedTarget.label} onEdit={() => startEditLabel('step', selectedTarget)} />}
             {selectedTarget.warning && <p className="target-warning">{selectedTarget.warning}</p>}
-          </> : <KeyValue name="动作" value={selectedStep.action} />}
+            </> : <KeyValue name={t('动作')} value={t(actionNames[selectedStep.action])} />}
           {selectedStep.action === 'input' && <>
             {inputEdit
-              ? <LabelEditor name="输入值" allowEmpty value={inputEdit.value} onChange={(value) => setInputEdit({ stepId: inputEdit.stepId, value })} onApply={applyInputEdit} onCancel={() => setInputEdit(null)} />
-              : <KeyValue name="输入值" value={selectedStep.value} copy={selectedStep.value} onEdit={() => startEditInput(selectedStep)} />}
-            <KeyValue name="先清空" value={selectedStep.clearFirst ? '是' : '否'} />
+              ? <LabelEditor name={t('输入值')} allowEmpty value={inputEdit.value} onChange={(value) => setInputEdit({ stepId: inputEdit.stepId, value })} onApply={applyInputEdit} onCancel={() => setInputEdit(null)} />
+              : <KeyValue name={t('输入值')} value={selectedStep.value} copy={selectedStep.value} onEdit={() => startEditInput(selectedStep)} />}
+            <KeyValue name={t('先清空')} value={selectedStep.clearFirst ? t('是') : t('否')} />
           </>}
           {selectedStep.action === 'swipe' && <>
-            <KeyValue name="方向" value={directionName(selectedStep.direction)} />
-            <KeyValue name="距离" value={selectedSwipeDistance ? `${selectedSwipeDistance} px` : '默认轨迹'} />
-            <KeyValue name="时长" value={formatDuration(selectedStep.duration)} />
-            {selectedStep.start && <KeyValue name="起点" value={`${selectedStep.start.x}, ${selectedStep.start.y}`} />}
-            {selectedStep.end && <KeyValue name="终点" value={`${selectedStep.end.x}, ${selectedStep.end.y}`} />}
+            <KeyValue name={t('方向')} value={t(directionName(selectedStep.direction))} />
+            <KeyValue name={t('距离')} value={selectedSwipeDistance ? `${selectedSwipeDistance} px` : t('默认轨迹')} />
+            <KeyValue name={t('时长')} value={formatDuration(selectedStep.duration)} />
+            {selectedStep.start && <KeyValue name={t('起点')} value={`${selectedStep.start.x}, ${selectedStep.start.y}`} />}
+            {selectedStep.end && <KeyValue name={t('终点')} value={`${selectedStep.end.x}, ${selectedStep.end.y}`} />}
           </>}
           {noteEdit
-            ? <LabelEditor name="备注" allowEmpty value={noteEdit.value} onChange={(value) => setNoteEdit({ value })} onApply={applyNoteEdit} onCancel={() => setNoteEdit(null)} />
-            : <KeyValue name="备注" value={selectedStep.note ?? '—'} copy={selectedStep.note} onEdit={() => startEditNote(selectedStep)} />}
+              ? <LabelEditor name={t('备注')} allowEmpty value={noteEdit.value} onChange={(value) => setNoteEdit({ value })} onApply={applyNoteEdit} onCancel={() => setNoteEdit(null)} />
+              : <KeyValue name={t('备注')} value={selectedStep.note ?? '—'} copy={selectedStep.note} onEdit={() => startEditNote(selectedStep)} />}
           {associatedAssertions.length > 0 && <div className="associated-assertions">
             <b>关联断言 · {associatedAssertions.length}</b>
             {associatedAssertions.map(({ index, step }) => <button key={step.id} onClick={() => setSelected(index)}>
@@ -1361,11 +1396,11 @@ export function App() {
           <div className="debug-row">
             <button onClick={() => void debugStep(selectedStep)} disabled={!session || replaying || Boolean(busy)} title="只回放当前这一条步骤，用于快速验证"><Bug />调试此步</button>
             <button onClick={() => void play(selected ?? 0)} disabled={!session || replaying || Boolean(busy)} title="从当前步骤开始回放，前面的步骤不执行"><Play />从此步回放</button>
-            {selectedDebug && <span className={`debug-state ${selectedDebug.status}`}>{selectedDebug.status === 'running' && <RefreshCw />}{debugLabel(selectedDebug)}</span>}
+            {selectedDebug && <span className={`debug-state ${selectedDebug.status}`}>{selectedDebug.status === 'running' && <RefreshCw />}{debugLabel(selectedDebug, t)}</span>}
           </div>
           {selectedTarget?.candidates?.length ? <CandidateList target={selectedTarget} busy={Boolean(busy)} onChoose={chooseLocator} onVerify={verifySelected} /> : null}
           {selected !== null && replayResults[selected] && <>
-            <KeyValue name="回放结果" value={resultLabel(replayResults[selected])} />
+            <KeyValue name="回放结果" value={resultLabel(replayResults[selected], t)} />
             <KeyValue name="回放耗时" value={formatDuration(replayResults[selected].duration)} />
             {replayResults[selected].retried !== undefined && <KeyValue name="重试次数" value={String(replayResults[selected].retried)} />}
             {replayResults[selected].waited !== undefined && <KeyValue name="等待耗时" value={formatDuration(replayResults[selected].waited)} />}
@@ -1432,28 +1467,37 @@ export function App() {
       onRefresh={() => void openDoctor()}
       onInstall={(id) => void installDependency(id)}
       onInstallAll={() => void installAllDependencies()}
+      onHelp={openHelp}
+    />}
+    {connectionFailure && <ConnectionErrorDialog
+      diagnostic={connectionFailure}
+      onClose={() => setConnectionFailure(null)}
+      onDoctor={() => { setConnectionFailure(null); void openDoctor(); }}
+      onLogs={() => { setConnectionFailure(null); void openLogs(); }}
+      onHelp={openHelp}
     />}
     {logsOpen && <LogDialog lines={logs} path={logPath} onClose={() => setLogsOpen(false)} onRefresh={() => void openLogs()} />}
-    {(error || logs.length > 0) && <footer className={error ? 'console error' : 'console'}><b>{error ? '执行失败' : 'Appium'}</b><span>{error || logs.at(-1)}</span>{error && <button onClick={() => setError('')}>关闭</button>}</footer>}
+    {(error || logs.length > 0) && <footer className={error ? 'console error' : 'console'}><b>{error ? t('执行失败') : 'Appium'}</b><span>{error || logs.at(-1)}</span>{error && <button onClick={() => setError('')}>{t('关闭')}</button>}</footer>}
   </main>;
 }
 
 const roleLabels: Record<'recommended' | 'alternative' | 'brittle', string> = { recommended: '推荐', alternative: '可用', brittle: '脆弱' };
 
 function CandidateList({ target, busy, onChoose, onVerify }: { target: Target; busy: boolean; onChoose: (locator: Locator) => void; onVerify: () => void }) {
+  const { t } = useI18n();
   const candidates = target.candidates ?? [];
   return <div className="candidate-list">
-    <div className="candidate-head"><b>定位器候选 · {candidates.length}</b><button onClick={onVerify} disabled={busy}><RefreshCw />重新校验</button></div>
+    <div className="candidate-head"><b>{t('定位器候选 · {count}', { count: candidates.length })}</b><button onClick={onVerify} disabled={busy}><RefreshCw />{t('重新校验')}</button></div>
     {candidates.map((candidate) => {
       const active = Boolean(target.locator && target.locator.strategy === candidate.locator.strategy && target.locator.value === candidate.locator.value);
       return <div key={`${candidate.locator.strategy}\0${candidate.locator.value}`} className={`candidate-row ${candidate.role} ${active ? 'active' : ''}`}>
         <button className="candidate-select" onClick={() => onChoose(candidate.locator)} title={`${candidate.locator.strategy}: ${candidate.locator.value}`}>
-          <span className={`badge ${candidate.role}`}>{roleLabels[candidate.role]}</span>
+          <span className={`badge ${candidate.role}`}>{t(roleLabels[candidate.role])}</span>
           <code>{candidate.locator.strategy} · {candidate.locator.value}</code>
-          <em>{candidate.matches} 个</em>
+          <em>{candidate.matches}</em>
           {candidate.note && <small>{candidate.note}</small>}
         </button>
-        <CopyButton value={candidate.locator.value} title="复制定位值" />
+        <CopyButton value={candidate.locator.value} title={t('复制定位值')} />
       </div>;
     })}
   </div>;
@@ -1462,6 +1506,7 @@ function CandidateList({ target, busy, onChoose, onVerify }: { target: Target; b
 type ElementRow = ElementTreeResponse['nodes'][number];
 
 function ElementTreePanel({ session, onHighlight }: { session: SessionState | null; onHighlight: (bounds: Target['bounds'] | null) => void }) {
+  const { locale, t } = useI18n();
   const [data, setData] = useState<ElementTreeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1481,9 +1526,9 @@ function ElementTreePanel({ session, onHighlight }: { session: SessionState | nu
       setData(result);
       setSelectedId(null);
       setAnalysis(null);
-      setNotice(result.truncated ? '控件树较大，仅显示前 4000 个节点' : '');
+      setNotice(result.truncated ? t('控件树较大，仅显示前 4000 个节点') : '');
       setExpanded(new Set(['root', ...result.nodes.filter((node) => node.depth <= 2).map((node) => node.id)]));
-    } catch (cause) { setError(message(cause)); }
+    } catch (cause) { setError(errorText(locale, cause)); }
     finally { setLoading(false); }
   }, [session]);
   useEffect(() => { void load(); }, [load]);
@@ -1521,7 +1566,7 @@ function ElementTreePanel({ session, onHighlight }: { session: SessionState | nu
     setAnalyzing(true);
     setError('');
     try { setAnalysis(await window.studio.analyzeElement(node.path)); }
-    catch (cause) { setError(message(cause)); }
+    catch (cause) { setError(errorText(locale, cause)); }
     finally { setAnalyzing(false); }
   };
   const select = (node: ElementRow) => {
@@ -1541,23 +1586,23 @@ function ElementTreePanel({ session, onHighlight }: { session: SessionState | nu
     if (!selected?.bounds) return;
     try {
       await window.studio.tap(Math.round(selected.bounds.x + selected.bounds.width / 2), Math.round(selected.bounds.y + selected.bounds.height / 2), false);
-      setNotice('已点击选中元素');
-    } catch (cause) { setError(message(cause)); }
+      setNotice(t('已点击选中元素'));
+    } catch (cause) { setError(errorText(locale, cause)); }
   };
   const copy = (value: string) => { void navigator.clipboard.writeText(value).catch(() => undefined); };
 
-  if (!session) return <div className="empty-inspector"><Crosshair /><b>尚未连接设备</b><span>连接或附加 Appium 会话后可浏览元素树</span></div>;
+  if (!session) return <div className="empty-inspector"><Crosshair /><b>{t('尚未连接设备')}</b><span>{t('连接或附加 Appium 会话后可浏览元素树')}</span></div>;
   return <div className="inspector-body tree-panel">
     <div className="tree-toolbar">
-      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索类型、name、label、resource-id…" />
-      <button onClick={() => void load()} disabled={loading} title="刷新 page source"><RefreshCw className={loading ? 'spin' : ''} /></button>
-      <button onClick={() => setExpanded(new Set((data?.nodes ?? []).map((node) => node.id)))} disabled={!data}>展开</button>
-      <button onClick={() => setExpanded(new Set(['root']))} disabled={!data}>收起</button>
+      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('搜索类型、name、label、resource-id…')} />
+      <button onClick={() => void load()} disabled={loading} title={t('刷新 page source')}><RefreshCw className={loading ? 'spin' : ''} /></button>
+      <button onClick={() => setExpanded(new Set((data?.nodes ?? []).map((node) => node.id)))} disabled={!data}>{t('展开')}</button>
+      <button onClick={() => setExpanded(new Set(['root']))} disabled={!data}>{t('收起')}</button>
     </div>
     {(error || notice) && <p className={error ? 'ai-error' : 'ai-notice'}>{error || notice}</p>}
     <div className="tree-list">
-      {loading && !data && <div className="doctor-loading"><RefreshCw />正在读取控件树…</div>}
-      {!loading && data && rows.length === 0 && <div className="empty-steps">没有匹配的元素</div>}
+      {loading && !data && <div className="doctor-loading"><RefreshCw />{t('正在读取控件树…')}</div>}
+      {!loading && data && rows.length === 0 && <div className="empty-steps">{t('没有匹配的元素')}</div>}
       {rows.map((node) => {
         const hasChildren = node.children > 0;
         const open = expanded.has(node.id);
@@ -1577,14 +1622,14 @@ function ElementTreePanel({ session, onHighlight }: { session: SessionState | nu
         <button onClick={() => copy(JSON.stringify(selected.attributes, null, 2))}><Copy /></button>
       </div>
       <div className="tree-detail-actions">
-        <button onClick={() => void analyze(selected)} disabled={analyzing}>{analyzing ? <RefreshCw className="spin" /> : <Crosshair />}生成定位器</button>
-        <button onClick={() => void tapSelected()} disabled={!selected.bounds}><Play />点击元素</button>
-        {analysis?.locator && <button onClick={() => copy(analysis.locator!.value)}><Copy />复制定位器</button>}
+        <button onClick={() => void analyze(selected)} disabled={analyzing}>{analyzing ? <RefreshCw className="spin" /> : <Crosshair />}{t('生成定位器')}</button>
+        <button onClick={() => void tapSelected()} disabled={!selected.bounds}><Play />{t('点击元素')}</button>
+        {analysis?.locator && <button onClick={() => copy(analysis.locator!.value)}><Copy />{t('复制定位器')}</button>}
       </div>
       {analysis?.locator && <div className="tree-locator"><span>{analysis.locator.strategy}</span><code>{analysis.locator.value}</code></div>}
       {analysis?.candidates?.length ? <div className="tree-candidates">
         {analysis.candidates.slice(0, 8).map((candidate, index) => <div key={`${candidate.locator.strategy}-${index}`} className={`tree-candidate ${candidate.role}`}>
-          <em>{candidate.role === 'recommended' ? '推荐' : candidate.role === 'alternative' ? '可用' : '脆弱'}</em>
+          <em>{t(candidate.role === 'recommended' ? '推荐' : candidate.role === 'alternative' ? '可用' : '脆弱')}</em>
           <span>{candidate.locator.strategy}</span>
           <code>{candidate.locator.value}</code>
           <button onClick={() => copy(candidate.locator.value)}><Copy /></button>
@@ -1603,6 +1648,7 @@ function shortElementType(type: string): string {
 }
 
 function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; onSessionReleased: () => void }) {
+  const { locale, t } = useI18n();
   const [devices, setDevices] = useState<Device[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [system, setSystem] = useState<SystemInfo | null>(null);
@@ -1633,12 +1679,12 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
     try {
       setDevices(await window.studio.listDevices());
       setError('');
-    } catch (cause) { setError(message(cause)); }
+    } catch (cause) { setError(errorText(locale, cause)); }
     finally { setDiscovering(false); }
   };
   useEffect(() => {
     void (async () => {
-      setBusy('读取设备和会话状态…');
+      setBusy(t('读取设备和会话状态…'));
       try {
         const [info, list, current] = await Promise.all([window.studio.system(), window.studio.listDevices(), window.studio.multiStatus()]);
         setSystem(info);
@@ -1648,7 +1694,7 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
           setActiveId(current.devices.find((device) => device.online)?.deviceId ?? null);
           void refreshShots(current);
         }
-      } catch (cause) { setError(message(cause)); }
+      } catch (cause) { setError(errorText(locale, cause)); }
       finally { setBusy(''); }
     })();
   }, []);
@@ -1687,7 +1733,7 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
   };
   const startSession = async () => {
     setMixedConfirm(false);
-    setBusy('正在建立多端会话…');
+    setBusy(t('正在建立多端会话…'));
     setError('');
     setNotice('');
     setResults([]);
@@ -1699,20 +1745,20 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
       statusRef.current = next;
       setActiveId(next.devices.find((device) => device.online)?.deviceId ?? null);
       setStreamNonce((value) => value + 1);
-      setNotice('多端同步已启动；单设备会话已释放');
+      setNotice(t('多端同步已启动；单设备会话已释放'));
       void refreshShots(next);
-    } catch (cause) { setError(message(cause)); }
+    } catch (cause) { setError(errorText(locale, cause)); }
     finally { setBusy(''); }
   };
   const requestStart = () => {
-    if (selectedDevices.length === 0) { setError('请至少选择一台在线设备'); return; }
+    if (selectedDevices.length === 0) { setError(t('请至少选择一台在线设备')); return; }
     if (mixed) { setMixedConfirm(true); return; }
     void startSession();
   };
   const stopSession = async () => {
-    setBusy('正在停止多端同步…');
+    setBusy(t('正在停止多端同步…'));
     try { await window.studio.multiStop(); }
-    catch (cause) { setError(message(cause)); }
+    catch (cause) { setError(errorText(locale, cause)); }
     finally {
       setStatus(null);
       statusRef.current = null;
@@ -1731,7 +1777,7 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
       setStatus((old) => old ? { ...old, devices: mergeDeviceFlags(old.devices, next) } : old);
       if (patch.live === false) void refreshShot(device.deviceId);
     } catch (cause) {
-      setError(message(cause));
+      setError(errorText(locale, cause));
       const next = await window.studio.multiStatus().catch(() => null);
       if (next) setStatus(next);
     }
@@ -1769,7 +1815,7 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
       } : old);
       const inactive = statusRef.current?.devices.filter((device) => device.online && !device.live) ?? [];
       window.setTimeout(() => { for (const device of inactive) void refreshShot(device.deviceId); }, 300);
-    } catch (cause) { setError(message(cause)); }
+    } catch (cause) { setError(errorText(locale, cause)); }
   };
   const sendText = () => {
     const value = text.trim();
@@ -1781,31 +1827,31 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
   return <div className="multi-overlay">
     <div className="multi-shell">
       <header className="multi-header">
-        <div className="multi-title"><LayoutGrid /><div><b>多端同步</b><span>{active ? `${status?.devices.length ?? 0} 台设备 · 操作会广播到所有参与同步的设备` : '选择设备并建立同步会话'}</span></div></div>
+        <div className="multi-title"><LayoutGrid /><div><b>{t('多端同步')}</b><span>{active ? t('{count} 台设备 · 操作会广播到所有参与同步的设备', { count: status?.devices.length ?? 0 }) : t('选择设备并建立同步会话')}</span></div></div>
         <div className="multi-header-actions">
           {active && <>
-            <button onClick={() => void setAllLive(true)}>全部实时</button>
-            <button onClick={() => void setAllLive(false)}>全部关闭</button>
-            <button onClick={() => void setAllSync(true)}>全部同步</button>
-            <button onClick={() => void setAllSync(false)}>全部暂停</button>
-            <button onClick={() => setStreamNonce((value) => value + 1)}><RefreshCw />重连画面</button>
-            <button className="danger" onClick={() => void stopSession()} disabled={Boolean(busy)}>停止同步</button>
+            <button onClick={() => void setAllLive(true)}>{t('全部实时')}</button>
+            <button onClick={() => void setAllLive(false)}>{t('全部关闭')}</button>
+            <button onClick={() => void setAllSync(true)}>{t('全部同步')}</button>
+            <button onClick={() => void setAllSync(false)}>{t('全部暂停')}</button>
+            <button onClick={() => setStreamNonce((value) => value + 1)}><RefreshCw />{t('重连画面')}</button>
+            <button className="danger" onClick={() => void stopSession()} disabled={Boolean(busy)}>{t('停止同步')}</button>
           </>}
-          <button onClick={() => void close()} disabled={Boolean(busy)}><XCircle />关闭</button>
+          <button onClick={() => void close()} disabled={Boolean(busy)}><XCircle />{t('关闭')}</button>
         </div>
       </header>
       {busy && <div className="multi-busy"><RefreshCw />{busy}</div>}
       {error && <div className="multi-error">{error}</div>}
       {notice && <div className="multi-notice">{notice}</div>}
-      {status?.mixedPlatform && <div className="multi-warning">混合平台同步中：Android 与 iOS 的布局、状态栏、输入法和返回行为可能不同，同一操作可能落在不同位置。建议使用同平台、同方向、同一 App 的设备。</div>}
-      {(status?.devices.filter((device) => device.live).length ?? 0) > 2 && <div className="multi-warning">当前 {status?.devices.filter((device) => device.live).length} 路实时画面，软件解码可能占用较高 CPU；可关闭部分实时或减少设备。</div>}
+      {status?.mixedPlatform && <div className="multi-warning">{t('混合平台同步中：Android 与 iOS 的布局、状态栏、输入法和返回行为可能不同，同一操作可能落在不同位置。建议使用同平台、同方向、同一 App 的设备。')}</div>}
+      {(status?.devices.filter((device) => device.live).length ?? 0) > 2 && <div className="multi-warning">{t('当前 {count} 路实时画面，软件解码可能占用较高 CPU；可关闭部分实时或减少设备。', { count: status?.devices.filter((device) => device.live).length ?? 0 })}</div>}
       {!active ? <div className="multi-select">
         <div className="multi-select-head">
-          <div><b>选择设备</b><span>支持多台同时实时画面；任意一台画面都可作为操作入口，操作会广播给所有参与同步的设备。</span></div>
+          <div><b>{t('选择设备')}</b><span>{t('支持多台同时实时画面；任意一台画面都可作为操作入口，操作会广播给所有参与同步的设备。')}</span></div>
           <div className="multi-select-side">
-            <span className="multi-count">已选 {selectedDevices.length} / {available.length}</span>
+            <span className="multi-count">{t('已选 {selected} / {total}', { selected: selectedDevices.length, total: available.length })}</span>
             <button onClick={() => void discoverDevices()} disabled={discovering}>
-              <RefreshCw className={discovering ? 'spin' : ''} />{discovering ? '发现中…' : '发现设备'}
+              <RefreshCw className={discovering ? 'spin' : ''} />{discovering ? t('发现中…') : t('发现设备')}
             </button>
           </div>
         </div>
@@ -1816,17 +1862,17 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
               <input type="checkbox" checked={selected.includes(device.id)} disabled={!usable} onChange={() => toggleSelected(device.id)} />
               <span className={`multi-platform ${device.platform}`}>{device.platform === 'ios' ? 'iOS' : 'Android'}</span>
               <span className="multi-device-name"><b>{device.name}</b><small>{device.id}</small></span>
-              <em className={usable ? 'online' : 'offline'}>{usable ? '在线' : device.platform === 'ios' && !iosSupported ? '仅 macOS 支持' : device.simulator ? '未启动' : device.status}</em>
+              <em className={usable ? 'online' : 'offline'}>{usable ? t('在线') : device.platform === 'ios' && !iosSupported ? t('仅 macOS 支持') : device.simulator ? t('未启动') : device.status}</em>
             </label>;
           })}
-          {devices.length === 0 && <div className="multi-empty">没有发现设备，请先连接手机或模拟器。</div>}
-          {devices.some((device) => device.simulator && device.status !== 'device') && <div className="multi-empty">未启动的模拟器显示为“未启动”，请先在 Xcode/Simulator 或 `xcrun simctl boot` 中启动。</div>}
+          {devices.length === 0 && <div className="multi-empty">{t('没有发现设备，请先连接手机或模拟器。')}</div>}
+          {devices.some((device) => device.simulator && device.status !== 'device') && <div className="multi-empty">{t('未启动的模拟器显示为“未启动”，请先在 Xcode/Simulator 或 `xcrun simctl boot` 中启动。')}</div>}
         </div>
-        {selectedHasIos && <label className="multi-bundle"><span>iOS BUNDLE ID（可选，用于激活前台 App）</span><input value={bundleId} onChange={(event) => setBundleId(event.target.value)} placeholder="com.example.app" /></label>}
-        {mixed && <div className="multi-warning">当前选择包含 Android 和 iOS。可以继续，但同一相对坐标可能对应不同布局；推荐使用同一平台。</div>}
+        {selectedHasIos && <label className="multi-bundle"><span>{t('iOS BUNDLE ID（可选，用于激活前台 App）')}</span><input value={bundleId} onChange={(event) => setBundleId(event.target.value)} placeholder="com.example.app" /></label>}
+        {mixed && <div className="multi-warning">{t('当前选择包含 Android 和 iOS。可以继续，但同一相对坐标可能对应不同布局；推荐使用同一平台。')}</div>}
         <div className="multi-start-row">
-          <span>默认所有设备参与同步并开启实时画面，可在进入后单独关闭。</span>
-          <button className="primary" onClick={requestStart} disabled={Boolean(busy) || selectedDevices.length === 0}>开始多端同步</button>
+          <span>{t('默认所有设备参与同步并开启实时画面，可在进入后单独关闭。')}</span>
+          <button className="primary" onClick={requestStart} disabled={Boolean(busy) || selectedDevices.length === 0}>{t('开始多端同步')}</button>
         </div>
       </div> : <div className="multi-workspace">
         <div className="multi-grid">
@@ -1845,24 +1891,24 @@ function MultiWorkspace({ onClose, onSessionReleased }: { onClose: () => void; o
           />)}
         </div>
         <div className="multi-actions">
-          <button onClick={() => void act({ action: 'back' })}><ArrowLeft />返回</button>
-          <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); sendText(); } }} placeholder="向所有参与同步设备输入文本" />
+          <button onClick={() => void act({ action: 'back' })}><ArrowLeft />{t('返回')}</button>
+          <input value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); sendText(); } }} placeholder={t('向所有参与同步设备输入文本')} />
           <button onClick={sendText} disabled={!text.trim()}><Send /></button>
-          <button onClick={() => void act({ action: 'key', key: 'backspace' })}><Keyboard />退格</button>
-          <button onClick={() => void act({ action: 'key', key: 'enter' })}>回车</button>
-          <button onClick={() => void act({ action: 'key', key: 'delete' })}>删除</button>
-          <button onClick={() => void refreshShots()}><RefreshCw />刷新静态截图</button>
-          {results.length > 0 && <span className="multi-result-summary">{results.filter((result) => result.ok).length}/{results.length} 成功</span>}
+          <button onClick={() => void act({ action: 'key', key: 'backspace' })}><Keyboard />{t('退格')}</button>
+          <button onClick={() => void act({ action: 'key', key: 'enter' })}>{t('回车')}</button>
+          <button onClick={() => void act({ action: 'key', key: 'delete' })}>{t('删除')}</button>
+          <button onClick={() => void refreshShots()}><RefreshCw />{t('刷新静态截图')}</button>
+          {results.length > 0 && <span className="multi-result-summary">{t('{passed}/{total} 成功', { passed: results.filter((result) => result.ok).length, total: results.length })}</span>}
         </div>
-        <div className="multi-hint">点击任意画面即广播操作；拖动发送滑动。实时开关只影响视频，参与同步开关决定是否接收指令。</div>
+        <div className="multi-hint">{t('点击任意画面即广播操作；拖动发送滑动。实时开关只影响视频，参与同步开关决定是否接收指令。')}</div>
       </div>}
       {mixedConfirm && <div className="multi-modal">
         <div className="multi-modal-box">
-          <b>确认混合平台同步</b>
-          <p>当前选择同时包含 Android 和 iOS。相对坐标广播可能因为布局、状态栏、输入法和返回行为差异，落到不同控件上。建议使用同平台、同方向、同一个 App。</p>
+          <b>{t('确认混合平台同步')}</b>
+          <p>{t('当前选择同时包含 Android 和 iOS。相对坐标广播可能因为布局、状态栏、输入法和返回行为差异，落到不同控件上。建议使用同平台、同方向、同一个 App。')}</p>
           <div className="multi-modal-actions">
-            <button onClick={() => setMixedConfirm(false)}>取消</button>
-            <button className="primary" onClick={() => void startSession()}>我了解风险，开始混合同步</button>
+            <button onClick={() => setMixedConfirm(false)}>{t('取消')}</button>
+            <button className="primary" onClick={() => void startSession()}>{t('我了解风险，开始混合同步')}</button>
           </div>
         </div>
       </div>}
@@ -1882,6 +1928,7 @@ function MultiDeviceCard({ device, active, shot, nonce, onActivate, onToggleLive
   onSwipe: (startX: number, startY: number, endX: number, endY: number, duration: number) => void;
   onRefreshShot: () => void;
 }) {
+  const { t } = useI18n();
   const mediaRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; startedAt: number; moved: boolean } | null>(null);
   const initialShotRef = useRef<string | null>(shot ?? null);
@@ -1928,11 +1975,11 @@ function MultiDeviceCard({ device, active, shot, nonce, onActivate, onToggleLive
         <span className={`multi-status-dot ${device.state}`} />
         <b>{device.name}</b>
         <em>{device.platform === 'ios' ? 'iOS' : 'Android'}</em>
-        {active && <strong>操作源</strong>}
+        {active && <strong>{t('操作源')}</strong>}
       </div>
       <div className="multi-card-toggles">
-        <button className={device.live ? 'on' : ''} onClick={onToggleLive}>实时</button>
-        <button className={device.sync ? 'on' : ''} onClick={onToggleSync}>同步</button>
+        <button className={device.live ? 'on' : ''} onClick={onToggleLive}>{t('实时')}</button>
+        <button className={device.sync ? 'on' : ''} onClick={onToggleSync}>{t('同步')}</button>
       </div>
     </div>
     <div className="multi-phone-stage">
@@ -1942,19 +1989,19 @@ function MultiDeviceCard({ device, active, shot, nonce, onActivate, onToggleLive
           {live ? (device.platform === 'android'
             ? <AndroidVideo nonce={nonce} src={src} initialShot={initialShotRef.current} screenshot={screenshot} setStreamStatus={setStreamStatus} setError={setStreamError} />
             : <IosVideo nonce={nonce} src={src} setStreamStatus={setStreamStatus} setError={setStreamError} />)
-            : shot ? <img src={`data:image/png;base64,${shot}`} alt={`${device.name} 静态画面`} draggable={false} />
-              : <div className="multi-no-video"><WifiOff /><span>{device.online ? '实时画面已关闭' : '设备离线'}</span>{device.online && <button onClick={onRefreshShot}>刷新截图</button>}</div>}
-          {live && streamStatus !== 'playing' && <div className="multi-stream-state"><RefreshCw />{streamStatus === 'failed' ? streamError || '视频连接失败' : '正在连接实时画面…'}</div>}
+            : shot ? <img src={`data:image/png;base64,${shot}`} alt={`${device.name} ${t('静态画面')}`} draggable={false} />
+              : <div className="multi-no-video"><WifiOff /><span>{device.online ? t('实时画面已关闭') : t('设备离线')}</span>{device.online && <button onClick={onRefreshShot}>{t('刷新截图')}</button>}</div>}
+          {live && streamStatus !== 'playing' && <div className="multi-stream-state"><RefreshCw />{streamStatus === 'failed' ? streamError || t('视频连接失败') : t('正在连接实时画面…')}</div>}
           <div className="multi-touch" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { dragRef.current = null; }} />
         </div>
       </div>
     </div>
     <div className="multi-card-foot">
-      <span>{device.online ? <Wifi /> : <WifiOff />}{device.state === 'ready' ? '在线' : device.state === 'connecting' ? '连接中' : device.state === 'offline' ? '离线' : '异常'}</span>
+      <span>{device.online ? <Wifi /> : <WifiOff />}{device.state === 'ready' ? t('在线') : device.state === 'connecting' ? t('连接中') : device.state === 'offline' ? t('离线') : t('异常')}</span>
       <span>{device.width}×{device.height}</span>
       {device.foregroundApp && <span title={device.foregroundApp}>{device.foregroundApp}</span>}
-      {device.lastAction && <span className={device.lastAction.ok ? 'ok' : 'fail'} title={device.lastAction.message}>{device.lastAction.ok ? '操作成功' : `操作失败${device.lastAction.message ? ` · ${device.lastAction.message}` : ''}`} · {device.lastAction.duration}ms</span>}
-      {!device.live && device.online && <button onClick={onRefreshShot}><RefreshCw />截图</button>}
+      {device.lastAction && <span className={device.lastAction.ok ? 'ok' : 'fail'} title={device.lastAction.message}>{device.lastAction.ok ? t('操作成功') : `${t('操作失败')}${device.lastAction.message ? ` · ${device.lastAction.message}` : ''}`} · {device.lastAction.duration}ms</span>}
+      {!device.live && device.online && <button onClick={onRefreshShot}><RefreshCw />{t('截图')}</button>}
     </div>
     {device.error && <div className="multi-card-error">{device.error}</div>}
   </div>;
@@ -1982,23 +2029,24 @@ function AttachDialog(props: {
   onAttach: () => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const disabled = props.busy;
   return <div className="doctor-overlay" onMouseDown={() => { if (!disabled) props.onClose(); }}>
     <div className="doctor-dialog attach-dialog" onMouseDown={(event) => event.stopPropagation()}>
-      <header><b>附加已有 Appium 会话</b><button onClick={props.onClose} disabled={disabled}>关闭</button></header>
+      <header><b>{t('附加已有 Appium 会话')}</b><button onClick={props.onClose} disabled={disabled}>{t('关闭')}</button></header>
       <div className="ai-form">
-        <p className="ai-hint">不新建、也不结束外部会话。脱离时只断开本工具绑定；需要可选的设备 UDID 或 WDA MJPEG 端口才能显示实时画面，否则使用截图模式。</p>
+        <p className="ai-hint">{t('不新建、也不结束外部会话。脱离时只断开本工具绑定；需要可选的设备 UDID 或 WDA MJPEG 端口才能显示实时画面，否则使用截图模式。')}</p>
         <label>Appium Server URL<input value={props.url} onChange={(event) => props.onUrl(event.target.value)} placeholder="http://127.0.0.1:4723" spellCheck={false} autoComplete="off" /></label>
-        <label>Session ID<input value={props.sessionId} onChange={(event) => props.onSessionId(event.target.value)} placeholder="粘贴 Appium 会话 ID" spellCheck={false} autoComplete="off" /></label>
-        <p className="ai-hint">Session ID 由创建该会话的客户端返回，也可在 Appium Server 日志中查看。只想自己开始测试时不必附加，直接新建会话即可。</p>
-        <label>平台<select value={props.platform} onChange={(event) => props.onPlatform(event.target.value as Platform)}><option value="android">Android</option><option value="ios" disabled={!props.iosSupported}>iOS（仅 macOS）</option></select></label>
-        <label>{props.platform === 'android' ? '设备 UDID（可选，用于启动实时画面）' : '设备 UDID（可选）'}<input value={props.deviceId} onChange={(event) => props.onDeviceId(event.target.value)} placeholder={props.platform === 'android' ? 'adb devices 中的序列号' : 'iPhone UDID'} spellCheck={false} autoComplete="off" /></label>
-        {props.platform === 'ios' && <label>WDA MJPEG 端口（可选）<input value={props.mjpegPort} onChange={(event) => props.onMjpegPort(event.target.value)} placeholder="例如 9100；留空则使用静态截图" inputMode="numeric" /></label>}
+        <label>{t('Session ID')}<input value={props.sessionId} onChange={(event) => props.onSessionId(event.target.value)} placeholder={t('粘贴 Appium 会话 ID')} spellCheck={false} autoComplete="off" /></label>
+        <p className="ai-hint">{t('Session ID 由创建该会话的客户端返回，也可在 Appium Server 日志中查看。只想自己开始测试时不必附加，直接新建会话即可。')}</p>
+        <label>{t('平台')}<select value={props.platform} onChange={(event) => props.onPlatform(event.target.value as Platform)}><option value="android">Android</option><option value="ios" disabled={!props.iosSupported}>{t('iOS（仅 macOS）')}</option></select></label>
+        <label>{props.platform === 'android' ? t('设备 UDID（可选，用于启动实时画面）') : t('设备 UDID（可选）')}<input value={props.deviceId} onChange={(event) => props.onDeviceId(event.target.value)} placeholder={props.platform === 'android' ? t('adb devices 中的序列号') : 'iPhone UDID'} spellCheck={false} autoComplete="off" /></label>
+        {props.platform === 'ios' && <label>{t('WDA MJPEG 端口（可选）')}<input value={props.mjpegPort} onChange={(event) => props.onMjpegPort(event.target.value)} placeholder={t('例如 9100；留空则使用静态截图')} inputMode="numeric" /></label>}
         {props.error && <p className="ai-error">{props.error}</p>}
       </div>
       <div className="ai-actions">
-        <button className="primary" onClick={props.onAttach} disabled={disabled}>{disabled ? <RefreshCw /> : <MonitorSmartphone />}{disabled ? '正在附加…' : '附加会话'}</button>
-        <button onClick={props.onClose} disabled={disabled}>取消</button>
+        <button className="primary" onClick={props.onAttach} disabled={disabled}>{disabled ? <RefreshCw /> : <MonitorSmartphone />}{disabled ? t('正在附加…') : t('附加会话')}</button>
+        <button onClick={props.onClose} disabled={disabled}>{t('取消')}</button>
       </div>
     </div>
   </div>;
@@ -2017,27 +2065,28 @@ function AiDialog(props: {
   onExport: () => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const disabled = props.busy;
   return <div className="doctor-overlay" onMouseDown={() => { if (!disabled) props.onClose(); }}>
     <div className="doctor-dialog ai-dialog" onMouseDown={(event) => event.stopPropagation()}>
-      <header><b>AI 用例导出</b><button onClick={props.onClose} disabled={disabled}>关闭</button></header>
+      <header><b>{t('AI 用例导出')}</b><button onClick={props.onClose} disabled={disabled}>{t('关闭')}</button></header>
       <div className="ai-form">
-        <label>用例标题<input value={props.title} onChange={(event) => props.onTitle(event.target.value)} placeholder="例如：登录后进入行情页" maxLength={200} /></label>
+        <label>{t('用例标题')}<input value={props.title} onChange={(event) => props.onTitle(event.target.value)} placeholder={t('例如：登录后进入行情页')} maxLength={200} /></label>
         <div className="ai-config-line">
-          <span className="ai-config-summary" title={props.config.baseUrl}>{props.configured ? `${props.config.model} · ${props.config.baseUrl}` : '尚未配置 AI 接口'}</span>
-          <button onClick={props.onOpenSettings} disabled={disabled}>AI 配置</button>
+          <span className="ai-config-summary" title={props.config.baseUrl}>{props.configured ? `${props.config.model} · ${props.config.baseUrl}` : t('尚未配置 AI 接口')}</span>
+          <button onClick={props.onOpenSettings} disabled={disabled}>{t('AI 配置')}</button>
         </div>
-        <p className="ai-hint">使用全局设置里的 AI 配置导出，不需要每次重复填写。配置只保存在当前浏览器，CSV 每行一个操作步骤，断言可为空。</p>
-        {!props.configured && <p className="ai-error">请先在顶部“设置”中完成 Base URL、Model 和 API Key 配置。</p>}
+        <p className="ai-hint">{t('使用全局设置里的 AI 配置导出，不需要每次重复填写。配置只保存在当前浏览器，CSV 每行一个操作步骤，断言可为空。')}</p>
+        {!props.configured && <p className="ai-error">{t('请先在顶部“设置”中完成 Base URL、Model 和 API Key 配置。')}</p>}
         {props.error && <p className="ai-error">{props.error}</p>}
         {props.notice && <p className="ai-notice">{props.notice}</p>}
-        {!props.canExport && <p className="ai-hint">当前没有步骤，先录制或载入脚本后再导出。</p>}
+        {!props.canExport && <p className="ai-hint">{t('当前没有步骤，先录制或载入脚本后再导出。')}</p>}
       </div>
       <div className="ai-actions">
         <button className="primary" onClick={props.onExport} disabled={disabled || !props.canExport || !props.configured}>
-          {props.busy ? <RefreshCw /> : <FileSpreadsheet />}{props.busy ? '正在生成…' : '导出 CSV'}
+          {props.busy ? <RefreshCw /> : <FileSpreadsheet />}{props.busy ? t('正在生成…') : t('导出 CSV')}
         </button>
-        <button onClick={props.onClose} disabled={disabled}>关闭</button>
+        <button onClick={props.onClose} disabled={disabled}>{t('关闭')}</button>
       </div>
     </div>
   </div>;
@@ -2053,32 +2102,38 @@ function SettingsDialog(props: {
   onSave: () => void;
   onClose: () => void;
 }) {
+  const { locale, setLocale, t } = useI18n();
   const { config } = props;
   const disabled = props.testing;
   return <div className="doctor-overlay" onMouseDown={() => { if (!disabled) props.onClose(); }}>
     <div className="doctor-dialog settings-dialog" onMouseDown={(event) => event.stopPropagation()}>
-      <header><b>全局设置</b><button onClick={props.onClose} disabled={disabled}>关闭</button></header>
+      <header><b>{t('全局设置')}</b><button onClick={props.onClose} disabled={disabled}>{t('关闭')}</button></header>
       <div className="ai-form">
         <section className="settings-section">
-          <h3>AI 用例</h3>
-          <p className="ai-hint">供顶部“AI 用例”导出使用。配置只保存在当前浏览器 localStorage，不写入服务端；测试和导出时仅随本次请求临时转发给本地服务。测试连接不会自动保存，修改后请点“保存配置”。</p>
+          <h3>{t('界面语言')}</h3>
+          <p className="ai-hint">{t('语言设置只影响界面文案，不会改变设备、脚本或导出数据的语言。')}</p>
+          <label>{t('界面语言')}<select value={locale} onChange={(event) => setLocale(event.target.value as typeof locale)}>{localeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        </section>
+        <section className="settings-section">
+          <h3>{t('AI 用例')}</h3>
+          <p className="ai-hint">{t('供顶部“AI 用例”导出使用。配置只保存在当前浏览器 localStorage，不写入服务端；测试和导出时仅随本次请求临时转发给本地服务。测试连接不会自动保存，修改后请点“保存配置”。')}</p>
           <label>Base URL<input value={config.baseUrl} onChange={(event) => props.onConfig({ ...config, baseUrl: event.target.value })} placeholder="https://api.openai.com/v1" spellCheck={false} autoComplete="off" /></label>
-          <label>API Key<input type="password" value={config.apiKey} onChange={(event) => props.onConfig({ ...config, apiKey: event.target.value })} placeholder="sk-...；本地兼容服务可留空" spellCheck={false} autoComplete="off" /></label>
+          <label>{t('API Key')}<input type="password" value={config.apiKey} onChange={(event) => props.onConfig({ ...config, apiKey: event.target.value })} placeholder={t('sk-...；本地兼容服务可留空')} spellCheck={false} autoComplete="off" /></label>
           <label>Model<input value={config.model} onChange={(event) => props.onConfig({ ...config, model: event.target.value })} placeholder="gpt-4o-mini" spellCheck={false} autoComplete="off" /></label>
         </section>
         {props.error && <p className="ai-error">{props.error}</p>}
         {props.notice && <p className="ai-notice">{props.notice}</p>}
       </div>
       <div className="ai-actions">
-        <button onClick={props.onTest} disabled={disabled}>{props.testing ? <><RefreshCw />测试中…</> : '测试连接'}</button>
-        <button className="primary" onClick={props.onSave} disabled={disabled}>保存配置</button>
-        <button onClick={props.onClose} disabled={disabled}>关闭</button>
+        <button onClick={props.onTest} disabled={disabled}>{props.testing ? <><RefreshCw />{t('测试中…')}</> : t('测试连接')}</button>
+        <button className="primary" onClick={props.onSave} disabled={disabled}>{t('保存配置')}</button>
+        <button onClick={props.onClose} disabled={disabled}>{t('关闭')}</button>
       </div>
     </div>
   </div>;
 }
 
-function DoctorDialog({ report, busy, installing, notice, error, onClose, onRefresh, onInstall, onInstallAll }: {
+function DoctorDialog({ report, busy, installing, notice, error, onClose, onRefresh, onInstall, onInstallAll, onHelp }: {
   report: DoctorReport | null;
   busy: boolean;
   installing: string;
@@ -2088,29 +2143,31 @@ function DoctorDialog({ report, busy, installing, notice, error, onClose, onRefr
   onRefresh: () => void;
   onInstall: (id: string) => void;
   onInstallAll: () => void;
+  onHelp: () => void;
 }) {
+  const { t } = useI18n();
   const installable = report?.checks.filter((check) => check.installable && check.status !== 'ok') ?? [];
   const system = report?.system;
   return <div className="doctor-overlay" onMouseDown={() => { if (!installing) onClose(); }}>
     <div className="doctor-dialog" onMouseDown={(event) => event.stopPropagation()}>
-      <header><b>环境体检</b><button onClick={onClose} disabled={Boolean(installing)}>关闭</button></header>
+      <header><b>{t('环境体检')}</b><div className="doctor-header-actions"><button onClick={onHelp} disabled={Boolean(installing)}><CircleHelp />{t('安装帮助')}</button><button onClick={onClose} disabled={Boolean(installing)}>{t('关闭')}</button></div></header>
       <div className="doctor-actions">
-        <span>{system ? `${system.osName} · ${system.packageManager === 'none' ? '未检测到包管理器' : system.packageManager} · ` : ''}{report ? new Date(report.generatedAt).toLocaleString() : '尚未检查'}</span>
+        <span>{system ? `${system.osName} · ${system.packageManager === 'none' ? t('未检测到包管理器') : system.packageManager} · ` : ''}{report ? new Date(report.generatedAt).toLocaleString() : t('尚未检查')}</span>
         <div className="doctor-action-buttons">
-          {installable.length > 0 && <button onClick={onInstallAll} disabled={busy || Boolean(installing)}>一键安装缺失项</button>}
-          <button onClick={onRefresh} disabled={busy || Boolean(installing)}><RefreshCw />{busy ? '检查中…' : '重新检查'}</button>
+          {installable.length > 0 && <button onClick={onInstallAll} disabled={busy || Boolean(installing)}>{t('一键安装缺失项')}</button>}
+          <button onClick={onRefresh} disabled={busy || Boolean(installing)}><RefreshCw />{busy ? t('检查中…') : t('重新检查')}</button>
         </div>
       </div>
       {notice && <p className="doctor-notice">{notice}</p>}
       {error && <p className="doctor-error">{error}</p>}
       <div className="doctor-list">
-        {busy && !report ? <div className="doctor-loading"><RefreshCw />正在检查环境…</div> : report?.checks.map((check) => <div key={check.id} className={`doctor-check ${check.status}`}>
+        {busy && !report ? <div className="doctor-loading"><RefreshCw />{t('正在检查环境…')}</div> : report?.checks.map((check) => <div key={check.id} className={`doctor-check ${check.status}`}>
           <span className="doctor-status">{check.status === 'ok' ? <CheckCircle2 /> : check.status === 'warn' ? <AlertTriangle /> : <XCircle />}</span>
           <div>
-            <b>{check.name}{check.required && check.status !== 'ok' ? ' · 必需' : ''}</b>
-            <small>{check.detail}</small>
-            {check.status !== 'ok' && check.fix && <em>{check.fix}</em>}
-            {check.installable && check.status !== 'ok' && <div className="doctor-install"><button onClick={() => onInstall(check.id)} disabled={busy || Boolean(installing)}>{installing === check.id ? <><RefreshCw />安装中…</> : '安装'}</button></div>}
+            <b>{t(check.name)}{check.required && check.status !== 'ok' ? ` · ${t('必需')}` : ''}</b>
+            <small>{t(check.detail)}</small>
+            {check.status !== 'ok' && check.fix && <em>{t(check.fix)}</em>}
+            {check.installable && check.status !== 'ok' && <div className="doctor-install"><button onClick={() => onInstall(check.id)} disabled={busy || Boolean(installing)}>{installing === check.id ? <><RefreshCw />{t('安装中…')}</> : t('安装')}</button></div>}
           </div>
         </div>)}
       </div>
@@ -2118,21 +2175,64 @@ function DoctorDialog({ report, busy, installing, notice, error, onClose, onRefr
   </div>;
 }
 
+function ConnectionErrorDialog({ diagnostic, onClose, onDoctor, onLogs, onHelp }: {
+  diagnostic: ConnectionDiagnostic;
+  onClose: () => void;
+  onDoctor: () => void;
+  onLogs: () => void;
+  onHelp: () => void;
+}) {
+  const { t } = useI18n();
+  return <div className="doctor-overlay" onMouseDown={onClose}>
+    <div className="doctor-dialog connection-dialog" onMouseDown={(event) => event.stopPropagation()}>
+      <header><b><AlertTriangle />{diagnostic.title}</b><button onClick={onClose}>{t('关闭')}</button></header>
+      <div className="connection-body">
+        <p className="connection-summary">{diagnostic.summary}</p>
+        {diagnostic.blockers.length > 0 && <section className="connection-section">
+          <h3>{t('缺少的必要环境')}</h3>
+          <div className="connection-blockers">
+            {diagnostic.blockers.map((check) => <article key={check.id} className={`connection-blocker ${check.status}`}>
+              <b>{check.status === 'fail' ? <XCircle /> : <AlertTriangle />}{t(check.name)}</b>
+              <span>{t(check.detail)}</span>
+              {check.fix && <em>{t(check.fix)}</em>}
+            </article>)}
+          </div>
+        </section>}
+        {diagnostic.suggestions.length > 0 && <section className="connection-section">
+          <h3>{t('建议处理')}</h3>
+          <ul>{diagnostic.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ul>
+        </section>}
+        {diagnostic.details && <details className="connection-details">
+          <summary>{t('查看技术详情')}</summary>
+          <pre>{diagnostic.details}</pre>
+        </details>}
+      </div>
+      <div className="connection-actions">
+        <button onClick={onHelp}><CircleHelp />{t('安装帮助')}</button>
+        <button onClick={onDoctor}><Stethoscope />{t('环境体检')}</button>
+        <button onClick={onLogs}><FileText />{t('运行日志')}</button>
+        <button className="primary" onClick={onClose}>{t('知道了')}</button>
+      </div>
+    </div>
+  </div>;
+}
+
 function LogDialog({ lines, path, onClose, onRefresh }: { lines: string[]; path: string; onClose: () => void; onRefresh: () => void }) {
+  const { t } = useI18n();
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [lines]);
   return <div className="doctor-overlay" onMouseDown={onClose}>
     <div className="doctor-dialog log-dialog" onMouseDown={(event) => event.stopPropagation()}>
-      <header><b>运行日志</b><button onClick={onClose}>关闭</button></header>
+      <header><b>{t('运行日志')}</b><button onClick={onClose}>{t('关闭')}</button></header>
       <div className="doctor-actions log-toolbar">
         <span className="log-path" title={path}>{path || 'logs/echobench.log'}</span>
         <div className="log-actions">
-          <button onClick={() => { void navigator.clipboard.writeText(lines.join('\n')).catch(() => undefined); }}>复制全部</button>
-          <button onClick={onRefresh}><RefreshCw />刷新</button>
+          <button onClick={() => { void navigator.clipboard.writeText(lines.join('\n')).catch(() => undefined); }}>{t('复制全部')}</button>
+          <button onClick={onRefresh}><RefreshCw />{t('刷新')}</button>
         </div>
       </div>
       <div className="log-list">
-        {lines.length ? lines.map((line, index) => <div key={`${index}-${line}`} className={`log-line ${logLevel(line)}`}>{line}</div>) : <div className="doctor-loading">暂无日志</div>}
+        {lines.length ? lines.map((line, index) => <div key={`${index}-${line}`} className={`log-line ${logLevel(line)}`}>{line}</div>) : <div className="doctor-loading">{t('暂无日志')}</div>}
         <div ref={endRef} />
       </div>
     </div>
@@ -2145,16 +2245,18 @@ function logLevel(line: string): string {
   return '';
 }
 
-function ClearDialog({ stage, count, onCancel, onNext, onConfirm }: { stage: 1 | 2; count: number; onCancel: () => void; onNext: () => void; onConfirm: () => void }) {  const second = stage === 2;
+function ClearDialog({ stage, count, onCancel, onNext, onConfirm }: { stage: 1 | 2; count: number; onCancel: () => void; onNext: () => void; onConfirm: () => void }) {
+  const { t } = useI18n();
+  const second = stage === 2;
   return <div className="confirm-overlay" onMouseDown={onCancel}>
     <div className={`confirm-dialog ${second ? 'danger' : ''}`} onMouseDown={(event) => event.stopPropagation()}>
-      <header><b>{second ? '再次确认清空' : '清空当前记录？'}</b><button onClick={onCancel}>取消</button></header>
-      <p>{second ? `将永久删除 ${count} 条步骤和本地缓存，此操作不可恢复。` : `即将清空 ${count} 条步骤，下一步还会再确认一次。`}</p>
+      <header><b>{second ? t('再次确认清空') : t('清空当前记录？')}</b><button onClick={onCancel}>{t('取消')}</button></header>
+      <p>{second ? t('将永久删除 {count} 条步骤和本地缓存，此操作不可恢复。', { count }) : t('即将清空 {count} 条步骤，下一步还会再确认一次。', { count })}</p>
       <div className="confirm-actions">
-        <button onClick={onCancel}>取消</button>
+        <button onClick={onCancel}>{t('取消')}</button>
         {second
-          ? <button className="danger" onClick={onConfirm}><Trash2 />确认清空</button>
-          : <button className="danger-outline" onClick={onNext}>继续</button>}
+          ? <button className="danger" onClick={onConfirm}><Trash2 />{t('确认清空')}</button>
+          : <button className="danger-outline" onClick={onNext}>{t('继续')}</button>}
       </div>
     </div>
   </div>;
@@ -2193,11 +2295,13 @@ function ColumnResizer({ width, min, max, onChange, onReset, label }: { width: n
   />;
 }
 function KeyValue({ name, value, copy, onEdit }: { name: string; value: string; copy?: string; onEdit?: () => void }) {
-  return <div className="key-value"><span>{name}</span><div className="key-value-body"><code title={value}>{value}</code>{onEdit && <button className="copy-button" title="编辑" onClick={onEdit}><Pencil /></button>}{copy !== undefined && <CopyButton value={copy} />}</div></div>;
+  const { t } = useI18n();
+  return <div className="key-value"><span>{t(name)}</span><div className="key-value-body"><code title={value}>{value}</code>{onEdit && <button className="copy-button" title={t('编辑')} onClick={onEdit}><Pencil /></button>}{copy !== undefined && <CopyButton value={copy} />}</div></div>;
 }
 function CopyButton({ value, title = '复制' }: { value: string; title?: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-  return <button className="copy-button" title={copied ? '已复制' : title} onClick={async () => {
+  return <button className="copy-button" title={copied ? t('已复制') : t(title)} onClick={async () => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
@@ -2209,24 +2313,26 @@ function CopyButton({ value, title = '复制' }: { value: string; title?: string
 const locatorStrategies: LocatorStrategy[] = ['accessibility id', 'id', '-android uiautomator', '-ios predicate string', '-ios class chain', 'xpath'];
 
 function LocatorEditor({ value, onApply, onCancel }: { value: { strategy: LocatorStrategy; value: string }; onApply: (locator: Locator) => void; onCancel: () => void }) {
+  const { t } = useI18n();
   const [strategy, setStrategy] = useState<LocatorStrategy>(value.strategy);
   const [text, setText] = useState(value.value);
   return <div className="locator-editor">
-    <label>定位策略<select value={strategy} onChange={(event) => setStrategy(event.target.value as LocatorStrategy)}>{locatorStrategies.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
-    <label>定位值<textarea rows={3} value={text} spellCheck={false} onChange={(event) => setText(event.target.value)} /></label>
-    <div className="locator-editor-actions"><button onClick={onCancel}>取消</button><button className="primary" onClick={() => onApply({ strategy, value: text.trim() })} disabled={!text.trim()}>应用修改</button></div>
+    <label>{t('定位策略')}<select value={strategy} onChange={(event) => setStrategy(event.target.value as LocatorStrategy)}>{locatorStrategies.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+    <label>{t('定位值')}<textarea rows={3} value={text} spellCheck={false} onChange={(event) => setText(event.target.value)} /></label>
+    <div className="locator-editor-actions"><button onClick={onCancel}>{t('取消')}</button><button className="primary" onClick={() => onApply({ strategy, value: text.trim() })} disabled={!text.trim()}>{t('应用修改')}</button></div>
   </div>;
 }
 
 function LabelEditor({ name = '标签', value, allowEmpty = false, onChange, onApply, onCancel }: { name?: string; value: string; allowEmpty?: boolean; onChange: (value: string) => void; onApply: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   return <div className="label-editor">
-    <span>{name}</span>
+    <span>{t(name)}</span>
     <input autoFocus value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => {
       if (event.key === 'Enter') { event.preventDefault(); onApply(); }
       if (event.key === 'Escape') { event.preventDefault(); onCancel(); }
     }} />
-    <button className="primary" onClick={onApply} disabled={!allowEmpty && !value.trim()}>应用</button>
-    <button onClick={onCancel}>取消</button>
+    <button className="primary" onClick={onApply} disabled={!allowEmpty && !value.trim()}>{t('应用')}</button>
+    <button onClick={onCancel}>{t('取消')}</button>
   </div>;
 }
 
@@ -2252,6 +2358,7 @@ const IosVideo = ({ nonce, src = '/api/video/ios', setStreamStatus, setError }: 
   setStreamStatus: React.Dispatch<React.SetStateAction<'idle' | 'loading' | 'playing' | 'failed'>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
 }) => {
+  const { t } = useI18n();
   const failedRef = useRef(false);
   useEffect(() => {
     failedRef.current = false;
@@ -2263,8 +2370,8 @@ const IosVideo = ({ nonce, src = '/api/video/ios', setStreamStatus, setError }: 
     key={`ios-${nonce}`}
     src={`${src}${src.includes('?') ? '&' : '?'}v=${nonce}`}
     onLoad={() => setStreamStatus('playing')}
-    onError={() => { failedRef.current = true; setStreamStatus('failed'); setError('iOS 视频流连接失败'); }}
-    alt="iOS 实时设备画面"
+    onError={() => { failedRef.current = true; setStreamStatus('failed'); setError(t('iOS 视频流连接失败')); }}
+    alt={t('iOS 实时设备画面')}
     draggable={false}
   />;
 };
@@ -2277,6 +2384,7 @@ const AndroidVideo = ({ nonce, src = '/api/video/android', initialShot, screensh
   setStreamStatus: React.Dispatch<React.SetStateAction<'idle' | 'loading' | 'playing' | 'failed'>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
 }) => {
+  const { locale, t } = useI18n();
   const localRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -2285,7 +2393,7 @@ const AndroidVideo = ({ nonce, src = '/api/video/android', initialShot, screensh
     if (!video) return;
     if (!('VideoDecoder' in window)) {
       setStreamStatus('failed');
-      setError('当前浏览器不支持 WebCodecs，请使用最新版 Chrome 或 Edge');
+      setError(t('当前浏览器不支持 WebCodecs，请使用最新版 Chrome 或 Edge'));
       return;
     }
 
@@ -2359,7 +2467,7 @@ const AndroidVideo = ({ nonce, src = '/api/video/android', initialShot, screensh
     const fail = (cause: unknown) => {
       if (disposed || (cause instanceof DOMException && cause.name === 'AbortError')) return;
       setStreamStatus('failed');
-      setError(`Android 视频流失败：${message(cause)}`);
+      setError(t('Android 视频流失败：{message}', { message: errorText(locale, cause) }));
     };
     const decoder = new VideoDecoder({
       output: (frame) => {
@@ -2454,17 +2562,17 @@ function withInputStep(list: Step[], step: InputStep | null): Step[] {
 function sameLocator(left: Target, right: Target): boolean {
   return Boolean(left.locator && right.locator && left.locator.strategy === right.locator.strategy && left.locator.value === right.locator.value);
 }
-function resultLabel(result: ReplayStepResult): string {
-  if (result.status === 'running') return '执行中…';
-  if (result.status === 'skipped') return '未执行';
-  if (result.status === 'failed') return `失败 · ${result.retried ? `重试 ${result.retried} · ` : ''}${result.message ?? '未知错误'}`;
-  const retry = result.retried ? ` · 重试 ${result.retried}` : '';
-  return `通过 · ${formatDuration(result.duration)}${retry}`;
+function resultLabel(result: ReplayStepResult, t: (source: string, params?: Record<string, string | number>) => string): string {
+  if (result.status === 'running') return t('执行中…');
+  if (result.status === 'skipped') return t('未执行');
+  if (result.status === 'failed') return `${t('失败')} · ${result.retried ? `${t('重试 {count}', { count: result.retried })} · ` : ''}${result.message ?? t('未知错误')}`;
+  const retry = result.retried ? ` · ${t('重试 {count}', { count: result.retried })}` : '';
+  return `${t('通过')} · ${formatDuration(result.duration)}${retry}`;
 }
-function debugLabel(result: DebugRun): string {
-  if (result.status === 'running') return result.activity ?? '执行中…';
-  if (result.status === 'passed') return `通过 · ${formatDuration(result.duration)}`;
-  return `失败 · ${result.message ?? '未知错误'}`;
+function debugLabel(result: DebugRun, t: (source: string, params?: Record<string, string | number>) => string): string {
+  if (result.status === 'running') return result.activity ?? t('执行中…');
+  if (result.status === 'passed') return `${t('通过')} · ${formatDuration(result.duration)}`;
+  return `${t('失败')} · ${result.message ?? t('未知错误')}`;
 }
 function clampNumber(value: string, min: number, max: number): number {
   const parsed = Math.round(Number(value));
@@ -2509,17 +2617,18 @@ function AssertionBar(props: {
   onMatch: (value: TextMatch) => void;
   onAdd: () => void;
 }) {
+  const { t } = useI18n();
   return <div className="assertion-bar">
-    <select value={props.condition} onChange={(event) => props.onCondition(event.target.value as WaitCondition)} title="选择断言条件">
-      {Object.entries(conditionNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+    <select value={props.condition} onChange={(event) => props.onCondition(event.target.value as WaitCondition)} title={t('选择断言条件')}>
+      {Object.entries(conditionNames).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}
     </select>
     {props.condition === 'text' && <>
-      <input value={props.expect} onChange={(event) => props.onExpect(event.target.value)} placeholder="期望文本" />
+      <input value={props.expect} onChange={(event) => props.onExpect(event.target.value)} placeholder={t('期望文本')} />
       <select value={props.match} onChange={(event) => props.onMatch(event.target.value as TextMatch)}>
-        <option value="contains">包含</option><option value="equals">等于</option><option value="regex">正则</option>
+        <option value="contains">{t('包含')}</option><option value="equals">{t('等于')}</option><option value="regex">{t('正则')}</option>
       </select>
     </>}
-    <button onClick={props.onAdd} disabled={props.busy || (props.condition === 'text' && !props.expect)}>添加断言</button>
+    <button onClick={props.onAdd} disabled={props.busy || (props.condition === 'text' && !props.expect)}>{t('添加断言')}</button>
   </div>;
 }
 

@@ -24,6 +24,15 @@ test('AI 配置损坏或版本不匹配时回到空配置', () => {
   assert.deepEqual(loadAiConfig(storage), { baseUrl: '', model: '', apiKey: '' });
 });
 
+test('保存设置不要求 AI 字段完整', () => {
+  const storage = new MemoryStorage();
+  const saved = saveAiConfig({ baseUrl: '', model: '', apiKey: '' }, storage);
+  assert.deepEqual(saved, { baseUrl: '', model: '', apiKey: '' });
+  assert.deepEqual(loadAiConfig(storage), saved);
+  const partial = saveAiConfig({ baseUrl: 'https://example.com/v1', model: '', apiKey: '' }, storage);
+  assert.deepEqual(loadAiConfig(storage), partial);
+});
+
 test('清空 AI 配置后不残留 Key', () => {
   const storage = new MemoryStorage();
   saveAiConfig({ baseUrl: 'https://x/v1', model: 'm', apiKey: 'k' }, storage);

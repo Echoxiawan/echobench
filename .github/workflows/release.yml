@@ -106,6 +106,9 @@ jobs:
       - name: Build application
         run: npm run desktop:build
 
+      - name: Bundle Android Platform-Tools
+        run: node scripts/prepare-platform-tools.mjs
+
       - name: Bundle JRE
         run: npm run desktop:prepare
 

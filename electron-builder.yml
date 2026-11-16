@@ -20,6 +20,8 @@ extraResources:
     to: scrcpy-server
   - from: resources/jre
     to: jre
+  - from: resources/platform-tools
+    to: platform-tools
 
 win:
   target: nsis

@@ -1,6 +1,6 @@
 {
   "name": "echobench",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "EchoBench — local-first Android/iOS mobile test studio with recording, replay, multi-device sync and AI CSV export",
   "author": "EchoBench contributors",
@@ -22,6 +22,7 @@
     "appium": "appium --port 4723 --base-path /",
     "desktop:build": "npm run build && tsc -p tsconfig.desktop.json",
     "desktop:dev": "npm run desktop:build && electron .",
+    "desktop:run": "electron .",
     "desktop:prepare": "node scripts/prepare-runtime.mjs"
   },
   "dependencies": {

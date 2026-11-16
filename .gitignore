@@ -10,6 +10,8 @@ release/
 logs/
 resources/jre/*
 !resources/jre/.gitkeep
+resources/platform-tools/*
+!resources/platform-tools/.gitkeep
 
 .idea/
 .qoder/

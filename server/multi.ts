@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { AppiumClient } from '../electron/appium-client.js';
+import { resolveAdbExecutable } from './adb.js';
 import { detectIosPlatformVersion } from './devices.js';
 import type { SigningSelection } from './ios-signing.js';
 import { logger } from './logger.js';
@@ -434,13 +435,13 @@ async function currentAndroidApp(deviceId: string): Promise<string | undefined> 
 }
 
 async function adb(deviceId: string, args: string[], timeout = 15_000): Promise<{ stdout: string; stderr: string }> {
-  const result = await execFileAsync('adb', ['-s', deviceId, ...args], { timeout, maxBuffer: 8 * 1024 * 1024 });
+  const result = await execFileAsync(resolveAdbExecutable(), ['-s', deviceId, ...args], { timeout, maxBuffer: 8 * 1024 * 1024 });
   return { stdout: String(result.stdout ?? ''), stderr: String(result.stderr ?? '') };
 }
 
 function adbScreenshot(deviceId: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('adb', ['-s', deviceId, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 25 * 1024 * 1024 }, (error, stdout) => {
+    execFile(resolveAdbExecutable(), ['-s', deviceId, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 25 * 1024 * 1024 }, (error, stdout) => {
       if (error) reject(error);
       else resolve(Buffer.from(stdout).toString('base64'));
     });

@@ -3,12 +3,18 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readdirSync, type WriteStream } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, delimiter } from 'node:path';
+import { fetchLatestGitHubRelease, pickDownloadUrl } from '../electron/update.js';
+import { normalizeLocale, translate, type Locale } from '../src/messages.js';
 
 const APP_PORT = 4710;
 const APP_URL = `http://127.0.0.1:${APP_PORT}`;
 const HEALTH_URL = `${APP_URL}/api/health`;
 const REPO_URL = 'https://github.com/Echoxiawan/echobench';
 const RELEASE_URL = `${REPO_URL}/releases/latest`;
+app.setName('EchoBench');
+process.title = 'EchoBench';
+let locale: Locale = normalizeLocale(app.getLocale()) ?? 'zh-CN';
+const tr = (source: string, params?: Record<string, string | number>) => translate(locale, source, params);
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
@@ -103,6 +109,9 @@ function serverEnvironment(): NodeJS.ProcessEnv {
   };
   const scrcpyServer = resourcePath('scrcpy-server');
   if (existsSync(scrcpyServer)) env.SCRCPY_SERVER_PATH = scrcpyServer;
+  const adbExecutable = process.platform === 'win32' ? 'adb.exe' : 'adb';
+  const adbPath = resourcePath('platform-tools', adbExecutable);
+  if (existsSync(adbPath)) env.ECHOBENCH_ADB_PATH = adbPath;
   addCommonToolPaths(env);
   const javaHome = findJavaHome();
   if (javaHome) {
@@ -203,10 +212,8 @@ function createWindow(): void {
 }
 
 async function checkForUpdates(manual = false): Promise<void> {
-  if (!app.isPackaged) {
-    if (manual) await dialog.showMessageBox({ type: 'info', title: '检查更新', message: '开发模式下不检查更新。', detail: '请使用打包后的安装包测试在线更新。' });
-    return;
-  }
+  // 开发模式不自动联网，但保留手动检查入口，便于验证 Releases 和弹窗流程。
+  if (!app.isPackaged && !manual) return;
   await checkGitHubRelease(manual);
 }
 
@@ -225,27 +232,17 @@ function isNewerVersion(candidate: string, current: string): boolean {
 
 async function checkGitHubRelease(manual: boolean): Promise<void> {
   try {
-    const response = await fetch('https://api.github.com/repos/Echoxiawan/echobench/releases/latest', {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'EchoBench' },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) throw new Error(`GitHub Releases HTTP ${response.status}`);
-    const release = await response.json() as {
-      tag_name?: string;
-      html_url?: string;
-      body?: string;
-      assets?: Array<{ name?: string; browser_download_url?: string }>;
-    };
-    const latest = release.tag_name?.replace(/^v/, '') ?? '';
+    const release = await fetchLatestGitHubRelease();
+    const latest = release.tagName?.replace(/^v/, '') ?? '';
     if (latest && isNewerVersion(latest, app.getVersion())) {
       const notes = (release.body ?? '').trim().slice(0, 4000);
-      const downloadUrl = pickDownloadUrl(release.assets ?? []) ?? release.html_url ?? RELEASE_URL;
+      const downloadUrl = pickDownloadUrl(release.assets ?? []) ?? release.htmlUrl ?? RELEASE_URL;
       const result = await dialog.showMessageBox({
         type: 'info',
-        title: '发现新版本',
-        message: `EchoBench ${latest} 可用（当前 ${app.getVersion()}）`,
-        detail: `请从 GitHub Releases 下载安装。\n\n${notes || '查看发布页了解更新内容。'}\n\n下载地址：${downloadUrl}`,
-        buttons: ['打开下载页', '稍后'],
+        title: tr('发现新版本'),
+        message: tr('EchoBench {version} 可用（当前 {current}）', { version: latest, current: app.getVersion() }),
+        detail: `${tr('请从 GitHub Releases 下载安装。')}\n\n${notes || tr('查看发布页了解更新内容。')}\n\n${tr('下载地址：')}${downloadUrl}`,
+        buttons: [tr('打开下载页'), tr('稍后')],
         defaultId: 0,
         cancelId: 1,
       });
@@ -253,74 +250,70 @@ async function checkGitHubRelease(manual: boolean): Promise<void> {
     } else if (manual) {
       await dialog.showMessageBox({
         type: 'info',
-        title: '检查更新',
-        message: '当前已经是最新版本。',
-        detail: `发布页：${RELEASE_URL}`,
+        title: tr('检查更新'),
+        message: tr('当前已经是最新版本。'),
+        detail: `${tr('发布页：')}${RELEASE_URL}`,
       });
     }
   } catch (error) {
     if (manual) {
       await dialog.showMessageBox({
         type: 'error',
-        title: '检查更新失败',
-        message: '暂时无法检查更新。',
-        detail: `${error instanceof Error ? error.message : String(error)}\n\n发布页：${RELEASE_URL}`,
+        title: tr('检查更新失败'),
+        message: tr('暂时无法检查更新。'),
+        detail: `${error instanceof Error ? error.message : String(error)}\n\n${tr('发布页：')}${RELEASE_URL}`,
       });
     }
   }
 }
 
-function pickDownloadUrl(assets: Array<{ name?: string; browser_download_url?: string }>): string | undefined {
-  const patterns = process.platform === 'win32'
-    ? [/\.exe$/i, /\.msi$/i]
-    : process.platform === 'darwin'
-      ? [/\.dmg$/i, /\.zip$/i]
-      : [/\.AppImage$/i, /\.deb$/i];
-  for (const pattern of patterns) {
-    const match = assets.find((asset) => asset.name && pattern.test(asset.name) && asset.browser_download_url);
-    if (match?.browser_download_url) return match.browser_download_url;
-  }
-  return undefined;
-}
-
 function showAbout(): void {
   void dialog.showMessageBox({
     type: 'info',
-    title: '关于 EchoBench',
+    title: tr('关于 EchoBench'),
     message: `EchoBench ${app.getVersion()}`,
-    detail: `本地优先的 Android / iOS 移动测试工作台\n\n发布页：${RELEASE_URL}`,
-    buttons: ['确定'],
+    detail: `${tr('本地优先的 Android / iOS 移动测试工作台')}\n\n${tr('发布页：')}${RELEASE_URL}`,
+    buttons: [tr('确定')],
   });
 }
 
 function buildMenu(): void {
+  const openSettings = () => {
+    if (!mainWindow) return;
+    void mainWindow.webContents.executeJavaScript("window.dispatchEvent(new CustomEvent('echobench:open-settings'))");
+  };
   const updateItem = (): MenuItemConstructorOptions => ({
-    label: '检查更新…',
+    label: tr('检查更新…'),
     click: () => void checkForUpdates(true),
   });
   const aboutItem = (): MenuItemConstructorOptions => ({
-    label: '关于 EchoBench',
+    label: tr('关于 EchoBench'),
     click: showAbout,
   });
   const openLogs: MenuItemConstructorOptions = {
-    label: '打开日志目录',
+    label: tr('打开日志目录'),
     click: () => void shell.openPath(join(app.getPath('userData'), 'logs')),
   };
   const openReleases: MenuItemConstructorOptions = {
-    label: '打开发布页',
+    label: tr('打开发布页'),
     click: () => void shell.openExternal(RELEASE_URL),
   };
   const template: MenuItemConstructorOptions[] = [];
   if (process.platform === 'darwin') {
     template.push({
-      role: 'appMenu',
+      label: 'EchoBench',
       submenu: [
-        { role: 'about', label: '关于 EchoBench' },
+        { role: 'about', label: tr('关于 EchoBench') },
         { type: 'separator' },
+        { label: tr('设置…'), accelerator: 'CmdOrCtrl+,', click: openSettings },
         updateItem(),
         openReleases,
         { type: 'separator' },
-        { role: 'quit' },
+        { role: 'hide', label: tr('隐藏 EchoBench') },
+        { role: 'hideOthers', label: tr('隐藏其他') },
+        { role: 'unhide', label: tr('全部显示') },
+        { type: 'separator' },
+        { role: 'quit', label: tr('退出 EchoBench') },
       ],
     });
   }

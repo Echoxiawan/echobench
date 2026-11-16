@@ -11,6 +11,7 @@ README 负责项目定位和快速开始；这里是完整使用与运维文档�
 
 ## 使用
 
+- [EchoBench 使用手册](user-guide.md) — 从打开产品开始，按小白操作顺序讲解连接、录制、断言、回放、导出和常见问题
 - [YAML 脚本格式](yaml.md) — 动作、断言、回放策略和候选定位器结构
 - [导出脚本](export.md) — WebdriverIO JavaScript、Appium Python Client、Appium Java Client
 - [多端同步](multi-device.md) — 多设备实时画面、同步广播、在线状态和平台风险

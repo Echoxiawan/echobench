@@ -4,6 +4,7 @@ import { request as httpRequest, type ServerResponse } from 'node:http';
 import { createServer, type Server, type Socket } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { resolveAdbExecutable } from './adb.js';
 
 const execute = promisify(execFile);
 const SCRCPY_VERSION = '3.2';
@@ -54,7 +55,7 @@ export class VideoStreamManager {
         ]);
         await terminateDeviceServer(deviceId);
         if (reverseCreated) {
-          await execute('adb', ['-s', deviceId, 'reverse', '--remove', `localabstract:${socketName}`]).catch(() => undefined);
+          await execute(resolveAdbExecutable(), ['-s', deviceId, 'reverse', '--remove', `localabstract:${socketName}`]).catch(() => undefined);
         }
       })().finally(() => {
         if (stream.teardown === cleanupPromise) stream.teardown = null;
@@ -76,18 +77,18 @@ export class VideoStreamManager {
       console.log(`[视频流] 使用 scrcpy-server：${serverPath}`);
       const scid = Math.floor(Math.random() * 0x7fffffff).toString(16).padStart(8, '0');
       socketName = `scrcpy_${scid}`;
-      await execute('adb', ['-s', deviceId, 'push', serverPath, DEVICE_SERVER_PATH]);
+      await execute(resolveAdbExecutable(), ['-s', deviceId, 'push', serverPath, DEVICE_SERVER_PATH]);
       assertStreamOpen(closed);
       listener = await createVideoListener();
       assertStreamOpen(closed);
       const listenerAddress = listener.address();
       if (!listenerAddress || typeof listenerAddress === 'string') throw new Error('无法取得 scrcpy 本地监听端口');
       const firstPacket = acceptWithFirstPacket(listener, () => androidServer, () => serverError);
-      await execute('adb', ['-s', deviceId, 'reverse', `localabstract:${socketName}`, `tcp:${listenerAddress.port}`]);
+      await execute(resolveAdbExecutable(), ['-s', deviceId, 'reverse', `localabstract:${socketName}`, `tcp:${listenerAddress.port}`]);
       reverseCreated = true;
       assertStreamOpen(closed);
       console.log(`[视频流] ADB reverse 已建立：${socketName} → 127.0.0.1:${listenerAddress.port}`);
-      androidServer = spawn('adb', [
+      androidServer = spawn(resolveAdbExecutable(), [
         '-s', deviceId, 'shell', `CLASSPATH=${DEVICE_SERVER_PATH}`, 'app_process', '/',
         'com.genymobile.scrcpy.Server', SCRCPY_VERSION, `scid=${scid}`, 'log_level=warn',
         `video_bit_rate=${options.bitRate ?? 4_000_000}`, `max_size=${options.maxSize ?? 1280}`, `max_fps=${options.maxFps ?? 30}`, 'audio=false',
@@ -246,5 +247,5 @@ async function terminateChild(child: ChildProcess): Promise<void> {
   });
 }
 async function terminateDeviceServer(deviceId: string): Promise<void> {
-  await execute('adb', ['-s', deviceId, 'shell', 'pkill', '-f', DEVICE_SERVER_PATH]).catch(() => undefined);
+  await execute(resolveAdbExecutable(), ['-s', deviceId, 'shell', 'pkill', '-f', DEVICE_SERVER_PATH]).catch(() => undefined);
 }
