@@ -1,6 +1,7 @@
 import yaml from 'js-yaml';
 import { z } from 'zod';
 import type { ProjectScript, Step } from '../src/types.js';
+import { buildExportScript } from './export-model.js';
 
 const strategy = z.enum(['accessibility id', 'id', '-ios predicate string', '-ios class chain', '-android uiautomator', 'xpath']);
 const locator = z.object({ strategy, value: z.string().min(1) });
@@ -70,14 +71,17 @@ const project = z.object({ version: z.literal(1), name: z.string().min(1), platf
 export function parseScript(content: string): ProjectScript { return project.parse(yaml.load(content)); }
 export function validateScript(value: unknown): ProjectScript { return project.parse(value); }
 export function stringifyScript(script: ProjectScript): string { return yaml.dump(validateScript(script), { noRefs: true, lineWidth: 120, quotingType: '"', forceQuotes: false }); }
+export function stringifyExportScript(script: ProjectScript): string {
+  return yaml.dump(validateScript(buildExportScript(validateScript(script))), { noRefs: true, lineWidth: 120, quotingType: '"', forceQuotes: false });
+}
 
 export function generateJavaScript(script: ProjectScript): string {
-  const data = JSON.stringify(validateScript(script), null, 2);
+  const data = JSON.stringify(buildExportScript(validateScript(script)), null, 2);
   return `// 由 EchoBench 生成。运行前请安装 webdriverio。
 import { remote } from 'webdriverio';
 
 const script = ${data};
-const defaults = { timeout: 10000, settleTimeout: 3000, retries: 2, retryDelay: 500, pollInterval: 300, settle: true, verify: false, coordinateFallback: false, locatorFallback: true, requireApp: true, ...script.replay };
+const defaults = { timeout: 10000, settleTimeout: 3000, retries: 2, retryDelay: 500, pollInterval: 300, settle: true, verify: false, requireApp: true, ...script.replay };
 const policy = (step) => ({ ...defaults, ...step.policy });
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const driver = await remote({
@@ -97,66 +101,31 @@ const selector = (locator) => {
   if (locator.strategy === '-ios class chain') return \`-ios class chain:\${locator.value}\`;
   return locator.value;
 };
-const find = async (locator) => {
-  try {
-    const found = await driver.$(selector(locator));
-    return (await found.isExisting()) ? found : null;
-  } catch { return null; }
-};
 const findMany = async (locator) => {
   try { return await driver.$$(selector(locator)); } catch { return []; }
-};
-const isIndexed = (locator) => /\\.instance\\(\\s*\\d+\\s*\\)/.test(locator.value) || /\\bindex\\s*==/.test(locator.value) || /\\]\\[\\d+\\]/.test(locator.value) || /^\\(.+\\)\\[\\d+\\]$/.test(locator.value.trim());
-const locatorsFor = (target, p) => {
-  if (!target || !target.locator) return [];
-  const list = [target.locator];
-  if (p.locatorFallback === false) return list;
-  for (const candidate of (target.candidates || [])) {
-    if (candidate.unique && candidate.role !== 'brittle' && !isIndexed(candidate.locator)) {
-      if (!list.some((item) => item.strategy === candidate.locator.strategy && item.value === candidate.locator.value)) list.push(candidate.locator);
-    }
-  }
-  return list;
 };
 const state = async (target) => ({
   displayed: await target.isDisplayed().catch(() => false),
   enabled: await target.isEnabled().catch(() => false),
 });
 const waitTarget = async (step, p) => {
-  const locators = locatorsFor(step.target, p);
-  if (!locators.length) return null;
+  const locator = step.target && step.target.locator;
+  if (!locator) return null;
   const deadline = Date.now() + p.timeout;
-  const locatorDeadline = step.action === 'tap' && step.target.coordinate && p.coordinateFallback ? Math.min(deadline, Date.now() + Math.min(p.timeout, 5000)) : deadline;
   let lastError = '控件未出现';
-  while (Date.now() < locatorDeadline) {
-    for (let index = 0; index < locators.length; index++) {
-      const locator = locators[index];
-      try {
-        if (p.locatorFallback === false) {
-          const found = await find(locator);
-          if (found) {
-            const ready = await state(found);
-            if (ready.displayed && ready.enabled) return found;
-            lastError = '控件尚未就绪（displayed=' + ready.displayed + '，enabled=' + ready.enabled + '）';
-          }
-          continue;
-        }
-        const foundList = await findMany(locator);
-        if (foundList.length > 1) { lastError = '定位器匹配 ' + foundList.length + ' 个元素，不使用该定位器'; continue; }
-        if (foundList.length === 1) {
-          const ready = await state(foundList[0]);
-          if (ready.displayed && ready.enabled) {
-            if (index > 0) console.log('主定位未命中，使用候选：' + locator.value);
-            return foundList[0];
-          }
-          lastError = '控件尚未就绪（displayed=' + ready.displayed + '，enabled=' + ready.enabled + '）';
-        }
-      } catch (error) { lastError = error.message; }
-    }
+  while (Date.now() < deadline) {
+    try {
+      const foundList = await findMany(locator);
+      if (foundList.length > 1) lastError = '定位器匹配 ' + foundList.length + ' 个元素';
+      else if (foundList.length === 1) {
+        const ready = await state(foundList[0]);
+        if (ready.displayed && ready.enabled) return foundList[0];
+        lastError = '控件尚未就绪（displayed=' + ready.displayed + '，enabled=' + ready.enabled + '）';
+      }
+    } catch (error) { lastError = error.message; }
     await sleep(p.pollInterval);
   }
-  if (step.action === 'tap' && step.target.coordinate && p.coordinateFallback) { console.log('定位器未就绪，使用坐标兜底：' + step.description); return null; }
-  throw new Error('等待控件就绪超时（' + p.timeout + 'ms）：' + step.description + '；已尝试 ' + locators.length + ' 个定位器；' + lastError);
+  throw new Error('等待控件就绪超时（' + p.timeout + 'ms）：' + step.description + '；' + lastError);
 };
 const pageStable = async (p, timeout) => {
   const deadline = Date.now() + timeout;
@@ -190,23 +159,19 @@ const waitCondition = async (step, p) => {
     return;
   }
   if (!step.target || !step.target.locator) throw new Error('等待步骤需要控件定位器');
-  const locators = locatorsFor(step.target, p);
+  const locator = step.target.locator;
   const deadline = Date.now() + step.timeout;
   let lastError = '控件未出现';
   while (Date.now() < deadline) {
-    for (const locator of locators) {
-      let foundList;
-      if (p.locatorFallback === false) { const one = await find(locator); foundList = one ? [one] : []; }
-      else foundList = await findMany(locator);
-      if (condition === 'hidden') {
-        if (!foundList.length) return;
-        const ready = await state(foundList[0]);
-        if (!ready.displayed) return;
-        lastError = '控件仍然可见';
-        continue;
-      }
-      if (foundList.length > 1) { lastError = '定位器匹配 ' + foundList.length + ' 个元素，不使用该定位器'; continue; }
-      if (!foundList.length) continue;
+    const foundList = await findMany(locator);
+    if (condition === 'hidden') {
+      if (!foundList.length) return;
+      const ready = await state(foundList[0]);
+      if (!ready.displayed) return;
+      lastError = '控件仍然可见';
+    } else if (foundList.length > 1) {
+      lastError = '定位器匹配 ' + foundList.length + ' 个元素';
+    } else if (foundList.length === 1) {
       const found = foundList[0];
       if (condition === 'exists') return;
       if (condition === 'visible') {
@@ -244,7 +209,6 @@ const gestureCenter = async (step, found) => {
     try { const rect = await found.getRect(); return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) }; } catch { /* 元素失效时退回坐标。 */ }
   }
   const size = await driver.getWindowSize();
-  if (step.target && step.target.bounds) return { x: Math.round(step.target.bounds.x + step.target.bounds.width / 2), y: Math.round(step.target.bounds.y + step.target.bounds.height / 2) };
   if (step.target && step.target.coordinate) return { x: Math.round(size.width * step.target.coordinate.xRatio), y: Math.round(size.height * step.target.coordinate.yRatio) };
   return { x: Math.round(size.width / 2), y: Math.round(size.height / 2) };
 };

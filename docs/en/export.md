@@ -9,6 +9,8 @@ npm run appium
 
 > All three scripts write device capabilities, input values, and assertions to plaintext files. Move passwords, tokens, and other secrets to environment variables or a secret manager before committing exported code.
 
+Exports are deterministic: each target contains only the locator you selected (or the coordinate when no locator exists). Candidate locators, bounds, verification timestamps, warnings, candidate fallback, and coordinate fallback are not exported. Assertions include an explicit wait condition and match mode. Replay and debug the flow in EchoBench first, then export the script or YAML.
+
 ## JavaScript (WebdriverIO)
 
 The exported `app-steps.js` uses WebdriverIO, but EchoBench itself does not depend on WebdriverIO. Run it in a separate directory:
@@ -38,7 +40,7 @@ pip install Appium-Python-Client
 python3 app-steps.py
 ```
 
-The Python script includes capabilities, waits/retries, locator fallback, coordinate fallback, gestures, and assertions, and closes the session when it finishes.
+The Python script includes capabilities, waits/retries, gestures, and explicit assertions, and closes the session when it finishes.
 
 ## Java (Appium Java Client)
 
@@ -57,7 +59,7 @@ Put `AppSteps.java` into a Maven or Gradle project and add the dependencies (adj
 </dependency>
 ```
 
-Compile and run the `AppSteps` main class. The Java script uses `AppiumBy` and W3C gestures and includes the same waits, locator fallback, and assertions as the YAML format.
+Compile and run the `AppSteps` main class. The Java script uses `AppiumBy` and W3C gestures and includes the same waits and explicit assertions as the YAML format.
 
 ## Choosing a format
 

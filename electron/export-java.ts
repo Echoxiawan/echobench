@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Dimension;
-import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.Rectangle;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.PointerInput;
@@ -44,9 +43,9 @@ ${caps || '    // 无额外 capabilities'}
   record Loc(String strategy, String value) {}
 
   record Policy(int timeout, int settleTimeout, int retries, int retryDelay, int pollInterval,
-                boolean settle, boolean verify, boolean coordinateFallback, boolean locatorFallback) {}
+                boolean settle, boolean verify) {}
 
-  record Step(String action, String description, List<Loc> locators, double[] coordinate, int[] start, int[] end,
+  record Step(String action, String description, Loc locator, double[] coordinate, int[] start, int[] end,
               String value, boolean clearFirst, boolean secret, String direction, int duration, double scale, String condition,
               String expect, String match, int timeout, Policy policy) {}
 
@@ -84,8 +83,8 @@ ${caps || '    // 无额外 capabilities'}
         for (int attempt = 0; attempt <= policy.retries(); attempt++) {
           boolean dispatched = false;
           try {
-            WebElement element = step.locators().isEmpty() ? null : waitTarget(driver, step, policy);
-            if (step.locators().isEmpty() && policy.settle() && pageDirty) {
+            WebElement element = step.locator() == null ? null : waitTarget(driver, step, policy);
+            if (step.locator() == null && policy.settle() && pageDirty) {
               if (!pageStable(driver, policy, policy.settleTimeout())) System.out.println("页面持续变化，继续执行");
               pageDirty = false;
             }
@@ -94,7 +93,7 @@ ${caps || '    // 无额外 capabilities'}
                 if (element != null) {
                   element.click();
                 } else {
-                  if (step.coordinate() == null) throw new RuntimeException("步骤既没有有效定位器，也没有坐标兜底");
+                  if (step.coordinate() == null) throw new RuntimeException("步骤既没有定位器，也没有坐标");
                   Dimension size = driver.manage().window().getSize();
                   tapPoint(driver, (int) (size.width * step.coordinate()[0]), (int) (size.height * step.coordinate()[1]));
                 }
@@ -192,42 +191,25 @@ ${caps || '    // 无额外 capabilities'}
   }
 
   static WebElement waitTarget(AppiumDriver driver, Step step, Policy policy) throws Exception {
-    if (step.locators().isEmpty()) return null;
+    Loc loc = step.locator();
+    if (loc == null) return null;
     long deadline = System.currentTimeMillis() + policy.timeout();
     String lastError = "控件未出现";
     while (System.currentTimeMillis() < deadline) {
-      for (Loc loc : step.locators()) {
-        try {
-          if (!policy.locatorFallback()) {
-            try {
-              WebElement element = driver.findElement(by(loc));
-              if (ready(element)) return element;
-              lastError = "控件尚未就绪";
-            } catch (NoSuchElementException ignored) {
-              // 继续等待。
-            }
-            continue;
-          }
-          List<WebElement> elements = findAll(driver, loc);
-          if (elements.size() > 1) {
-            lastError = "定位器匹配 " + elements.size() + " 个元素，不使用该定位器";
-            continue;
-          }
-          if (elements.size() == 1) {
-            if (ready(elements.get(0))) return elements.get(0);
-            lastError = "控件尚未就绪";
-          }
-        } catch (Exception error) {
-          lastError = error.getMessage();
+      try {
+        List<WebElement> elements = findAll(driver, loc);
+        if (elements.size() > 1) {
+          lastError = "定位器匹配 " + elements.size() + " 个元素";
+        } else if (elements.size() == 1) {
+          if (ready(elements.get(0))) return elements.get(0);
+          lastError = "控件尚未就绪";
         }
+      } catch (Exception error) {
+        lastError = error.getMessage();
       }
       Thread.sleep(policy.pollInterval());
     }
-    if ("tap".equals(step.action()) && step.coordinate() != null && policy.coordinateFallback()) {
-      System.out.println("定位器未就绪，使用坐标兜底：" + step.description());
-      return null;
-    }
-    throw new RuntimeException("等待控件就绪超时：" + step.description() + "；已尝试 " + step.locators().size() + " 个定位器；" + lastError);
+    throw new RuntimeException("等待控件就绪超时：" + step.description() + "；" + lastError);
   }
 
   static boolean pageStable(AppiumDriver driver, Policy policy, int timeout) throws Exception {
@@ -279,21 +261,17 @@ ${caps || '    // 无额外 capabilities'}
       if (!pageStable(driver, policy, step.timeout())) throw new RuntimeException("页面持续变化，等待稳定超时（" + step.timeout() + "ms）");
       return;
     }
+    if (step.locator() == null) throw new RuntimeException("等待步骤需要控件定位器");
     long deadline = System.currentTimeMillis() + step.timeout();
     String lastError = "控件未出现";
     while (System.currentTimeMillis() < deadline) {
-      for (Loc loc : step.locators()) {
-        List<WebElement> elements = findAll(driver, loc);
-        if ("hidden".equals(step.condition())) {
-          if (elements.isEmpty() || !elements.get(0).isDisplayed()) return;
-          lastError = "控件仍然可见";
-          continue;
-        }
-        if (elements.size() > 1) {
-          lastError = "定位器匹配 " + elements.size() + " 个元素，不使用该定位器";
-          continue;
-        }
-        if (elements.isEmpty()) continue;
+      List<WebElement> elements = findAll(driver, step.locator());
+      if ("hidden".equals(step.condition())) {
+        if (elements.isEmpty() || !elements.get(0).isDisplayed()) return;
+        lastError = "控件仍然可见";
+      } else if (elements.size() > 1) {
+        lastError = "定位器匹配 " + elements.size() + " 个元素";
+      } else if (!elements.isEmpty()) {
         WebElement element = elements.get(0);
         if ("exists".equals(step.condition())) return;
         if ("visible".equals(step.condition())) {
@@ -444,9 +422,7 @@ ${caps || '    // 无额外 capabilities'}
 }
 
 function stepJava(step: PlannedStep): string {
-  const locators = step.locators
-    .map((locator) => `new Loc(${javaString(locator.strategy)}, ${javaString(locator.value)})`)
-    .join(', ');
+  const locator = step.locator ? `new Loc(${javaString(step.locator.strategy)}, ${javaString(step.locator.value)})` : 'null';
   const coordinate = step.coordinate ? `new double[]{${step.coordinate.xRatio}, ${step.coordinate.yRatio}}` : 'null';
   const start = step.start ? `new int[]{${step.start.x}, ${step.start.y}}` : 'null';
   const end = step.end ? `new int[]{${step.end.x}, ${step.end.y}}` : 'null';
@@ -454,7 +430,7 @@ function stepJava(step: PlannedStep): string {
   const args = [
     javaString(step.action),
     javaString(step.description),
-    `List.of(${locators})`,
+    locator,
     coordinate,
     start,
     end,
@@ -468,7 +444,7 @@ function stepJava(step: PlannedStep): string {
     nullable(step.expect),
     nullable(step.match),
     String(step.timeout ?? 0),
-    `new Policy(${policy.timeout}, ${policy.settleTimeout}, ${policy.retries}, ${policy.retryDelay}, ${policy.pollInterval}, ${policy.settle}, ${policy.verify}, ${policy.coordinateFallback}, ${policy.locatorFallback})`,
+    `new Policy(${policy.timeout}, ${policy.settleTimeout}, ${policy.retries}, ${policy.retryDelay}, ${policy.pollInterval}, ${policy.settle}, ${policy.verify})`,
   ];
   return `new Step(${args.join(', ')})`;
 }

@@ -117,6 +117,8 @@ iOS 没有 `clickable` 属性，因此按控件类型识别可点击性：
 
 `target.candidates` 是可选的；旧脚本没有 `candidates` 也能正常载入和回放。
 
+候选定位器只用于编辑器内的定位、校验和调试。导出 YAML 或自动化脚本时会执行确定性固化：只保留当前选定的 `locator`（没有定位器时保留 `coordinate`），移除 `candidates`、`bounds`、`verifiedAt`、`warning` 以及候选降级/坐标兜底配置；`wait` 步骤会显式写出 `condition`，文本断言会显式写出 `match`。
+
 ```yaml
 target:
   locator:

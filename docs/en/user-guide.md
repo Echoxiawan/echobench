@@ -646,6 +646,8 @@ Click **Export script** and choose:
 
 These files are for automation projects; ordinary manual testers do not need to export them.
 
+Exporting freezes the selected locators and assertions into deterministic content. Candidate locators, element bounds, and verification metadata are not included, and the runtime does not switch locators or fall back to coordinates. Replay the flow successfully on the current device before exporting YAML or code.
+
 Before exporting, check:
 
 - the device UDID matches the target environment;

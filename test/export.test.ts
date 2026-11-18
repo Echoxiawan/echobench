@@ -37,27 +37,52 @@ const script: ProjectScript = {
   ],
 };
 
-test('JavaScript 导出包含候选降级、新手势与断言', () => {
+test('JavaScript 导出只包含选定的定位器、手势与断言', () => {
   const output = generateJavaScript(script);
-  for (const expected of ['-ios class chain:', 'locatorsFor', 'const waitCondition', 'checkedState', 'doubleTap', 'longPress', 'pinch', 'locatorFallback']) {
+  for (const expected of ['const waitCondition', 'checkedState', 'doubleTap', 'longPress', 'pinch']) {
     assert.ok(output.includes(expected), `缺少 ${expected}`);
   }
+  assert.ok(!output.includes('**/XCUIElementTypeButton[`name == "login"`]'), '不应导出备选候选定位器');
+  assert.ok(!output.includes('"candidates"'), '不应导出候选定位器列表');
+  assert.ok(!output.includes('locatorFallback'), '不应导出候选降级开关');
+  assert.ok(!output.includes('coordinateFallback'), '不应导出坐标兜底开关');
+  const start = output.indexOf('const script = ') + 'const script = '.length;
+  const end = output.indexOf(';\nconst defaults');
+  const exported = JSON.parse(output.slice(start, end));
+  assert.deepEqual(exported.steps[0].target, { label: '登录', locator: primary });
+  assert.equal(exported.steps.at(-1).condition, 'checked');
   assert.ok(!/NaN|\[object Object\]/.test(output));
 });
 
-test('Python 导出包含选择器映射、候选降级与手势', () => {
+test('Python 导出只包含选定的定位器、手势与断言', () => {
   const output = generatePython(script);
-  for (const expected of ['AppiumBy.IOS_CLASS_CHAIN', 'def wait_target', 'def wait_condition', 'checked_state', 'mobile: doubleClickGesture', 'json.loads', 'locatorFallback']) {
+  for (const expected of ['AppiumBy.IOS_CLASS_CHAIN', 'def wait_target', 'def wait_condition', 'checked_state', 'mobile: doubleClickGesture', 'json.loads']) {
     assert.ok(output.includes(expected), `缺少 ${expected}`);
   }
+  assert.ok(!output.includes('**/XCUIElementTypeButton[`name == "login"`]'), '不应导出备选候选定位器');
+  assert.ok(!output.includes('"candidates"'), '不应导出候选定位器列表');
+  assert.ok(!output.includes('locatorFallback'), '不应导出候选降级开关');
+  assert.ok(!output.includes('coordinateFallback'), '不应导出坐标兜底开关');
+  const start = output.indexOf('PLAN = json.loads(') + 'PLAN = json.loads('.length;
+  const end = output.indexOf(')\nPLATFORM', start);
+  const plan = JSON.parse(JSON.parse(output.slice(start, end)));
+  assert.deepEqual(plan.steps[0].locator, primary);
+  assert.equal(plan.steps[0].locators, undefined);
+  assert.equal(plan.steps[0].policy.locatorFallback, undefined);
+  assert.equal(plan.steps[0].coordinate, undefined);
   assert.ok(!/NaN|\[object Object\]/.test(output));
 });
 
-test('Java 导出包含记录类型、选择器映射与手势', () => {
+test('Java 导出只包含选定的定位器、记录类型与手势', () => {
   const output = generateJava(script);
-  for (const expected of ['AppiumBy.iOSClassChain', 'record Step', 'waitCondition', 'mobile: doubleClickGesture', 'locatorFallback']) {
+  for (const expected of ['AppiumBy.iOSClassChain', 'record Step', 'waitCondition', 'mobile: doubleClickGesture']) {
     assert.ok(output.includes(expected), `缺少 ${expected}`);
   }
+  assert.ok(!output.includes('**/XCUIElementTypeButton[`name == "login"`]'), '不应导出备选候选定位器');
+  assert.ok(!output.includes('candidates'), '不应导出候选定位器列表');
+  assert.ok(!output.includes('locatorFallback'), '不应导出候选降级开关');
+  assert.ok(!output.includes('coordinateFallback'), '不应导出坐标兜底开关');
+  assert.ok(output.includes(`new Loc("accessibility id", "login")`), '应导出选定的定位器');
   assert.ok(!/undefined|NaN|\[object Object\]/.test(output));
   assert.equal((output.match(/new Step\(/g) ?? []).length, script.steps.length);
   assert.equal(count(output, '{'), count(output, '}'), '花括号应平衡');

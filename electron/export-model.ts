@@ -1,12 +1,14 @@
-import type { Locator, LocatorStrategy, ProjectScript, ReplaySettings, Step, StepPolicy } from '../src/types.js';
+import type { Locator, LocatorStrategy, ProjectScript, ReplaySettings, Step, StepPolicy, Target } from '../src/types.js';
 import { defaultReplaySettings } from '../src/types.js';
-import { fallbackLocators } from './locator.js';
 import { resolvePolicy } from './replay.js';
+
+export type ExportSettings = Omit<ReplaySettings, 'locatorFallback' | 'coordinateFallback'>;
+export type ExportPolicy = Omit<Required<StepPolicy>, 'locatorFallback' | 'coordinateFallback'>;
 
 export interface PlannedStep {
   action: Step['action'];
   description: string;
-  locators: Locator[];
+  locator?: Locator;
   coordinate?: { xRatio: number; yRatio: number };
   value?: string;
   clearFirst?: boolean;
@@ -20,25 +22,114 @@ export interface PlannedStep {
   expect?: string;
   match?: string;
   timeout?: number;
-  policy: Required<StepPolicy>;
+  policy: ExportPolicy;
 }
 
 export interface ScriptPlan {
   platform: ProjectScript['platform'];
   capabilities: Record<string, string>;
-  settings: ReplaySettings;
+  settings: ExportSettings;
   expectedApp?: string;
   steps: PlannedStep[];
 }
 
-export function buildPlan(script: ProjectScript): ScriptPlan {
-  const settings: ReplaySettings = { ...defaultReplaySettings, ...script.replay };
-  const steps: PlannedStep[] = script.steps.map((step) => planStep(step, settings));
+/**
+ * 生成用于导出的确定性脚本。
+ * 候选定位器、校验时间、风险提示和坐标兜底只服务于编辑器内的调试；
+ * 导出时只保留用户最终选定的定位方式和显式断言，避免运行时再次做选择。
+ */
+export function buildExportScript(script: ProjectScript): ProjectScript {
   return {
+    version: 1,
+    name: script.name,
     platform: script.platform,
-    capabilities: script.capabilities,
-    settings,
-    expectedApp: script.capabilities.appPackage || script.capabilities.bundleId,
+    capabilities: { ...script.capabilities },
+    replay: exportReplay(script.replay),
+    steps: script.steps.map(exportStep),
+  };
+}
+
+function exportReplay(replay: Partial<ReplaySettings> | undefined): Partial<ReplaySettings> | undefined {
+  if (!replay) return undefined;
+  const next = { ...replay };
+  delete next.locatorFallback;
+  delete next.coordinateFallback;
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function exportStepPolicy(policy: StepPolicy | undefined): StepPolicy | undefined {
+  if (!policy) return undefined;
+  const next = { ...policy };
+  delete next.locatorFallback;
+  delete next.coordinateFallback;
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function exportTarget(target: Target | undefined): Target | undefined {
+  if (!target) return undefined;
+  const next: Target = {};
+  if (target.label !== undefined) next.label = target.label;
+  if (target.locator) {
+    next.locator = { strategy: target.locator.strategy, value: target.locator.value };
+  } else if (target.coordinate) {
+    next.coordinate = { xRatio: target.coordinate.xRatio, yRatio: target.coordinate.yRatio };
+  }
+  return next;
+}
+
+function withPolicy<T extends Step>(step: T): T {
+  const policy = exportStepPolicy(step.policy);
+  const next = { ...step };
+  if (policy) next.policy = policy;
+  else delete next.policy;
+  return next;
+}
+
+function exportStep(step: Step): Step {
+  if (step.action === 'swipe' || step.action === 'back') return withPolicy({ ...step });
+
+  const target = exportTarget(step.target);
+  if (step.action === 'tap' || step.action === 'doubleTap' || step.action === 'longPress') {
+    if (!target?.locator && !target?.coordinate) {
+      throw new Error(`步骤「${step.description}」没有选定的定位方式，无法导出`);
+    }
+    return withPolicy({ ...step, target });
+  }
+  if (step.action === 'input') {
+    if (!target?.locator) {
+      throw new Error(`输入步骤「${step.description}」必须包含选定的控件定位器，无法导出`);
+    }
+    return withPolicy({ ...step, target });
+  }
+  if (step.action === 'pinch') {
+    return withPolicy({ ...step, target: step.target ? target : undefined });
+  }
+
+  const condition = step.condition ?? 'exists';
+  if (condition !== 'stable' && !target?.locator) {
+    throw new Error(`断言步骤「${step.description}」必须包含选定的控件定位器，无法导出`);
+  }
+  const next: Extract<Step, { action: 'wait' }> = { ...step, target, condition };
+  if (condition === 'text') {
+    if (!step.expect) throw new Error(`文本断言「${step.description}」必须填写期望值，无法导出`);
+    next.expect = step.expect;
+    next.match = step.match ?? 'contains';
+  } else {
+    delete next.expect;
+    delete next.match;
+  }
+  return withPolicy(next);
+}
+
+export function buildPlan(script: ProjectScript): ScriptPlan {
+  const exported = buildExportScript(script);
+  const settings: ReplaySettings = { ...defaultReplaySettings, ...exported.replay };
+  const steps: PlannedStep[] = exported.steps.map((step) => planStep(step, settings));
+  return {
+    platform: exported.platform,
+    capabilities: exported.capabilities,
+    settings: planSettings(settings),
+    expectedApp: exported.capabilities.appPackage || exported.capabilities.bundleId,
     steps,
   };
 }
@@ -46,16 +137,11 @@ export function buildPlan(script: ProjectScript): ScriptPlan {
 function planStep(step: Step, settings: ReplaySettings): PlannedStep {
   const policy = resolvePolicy(settings, step);
   const target = 'target' in step ? step.target : undefined;
-  const locators = target?.locator
-    ? policy.locatorFallback
-      ? fallbackLocators(target)
-      : [target.locator]
-    : [];
   const base: PlannedStep = {
     action: step.action,
     description: step.description,
-    locators,
-    policy,
+    locator: target?.locator,
+    policy: planPolicy(policy),
     coordinate: target?.coordinate,
   };
   if (step.action === 'input') return { ...base, value: step.value, clearFirst: step.clearFirst, secret: step.secret };
@@ -64,6 +150,31 @@ function planStep(step: Step, settings: ReplaySettings): PlannedStep {
   if (step.action === 'pinch') return { ...base, direction: step.direction, duration: step.duration, scale: step.scale };
   if (step.action === 'wait') return { ...base, condition: step.condition ?? 'exists', expect: step.expect, match: step.match, timeout: step.timeout };
   return base;
+}
+
+function planSettings(settings: ReplaySettings): ExportSettings {
+  return {
+    timeout: settings.timeout,
+    settleTimeout: settings.settleTimeout,
+    retries: settings.retries,
+    retryDelay: settings.retryDelay,
+    pollInterval: settings.pollInterval,
+    settle: settings.settle,
+    stopOnFailure: settings.stopOnFailure,
+    requireApp: settings.requireApp,
+  };
+}
+
+function planPolicy(policy: Required<StepPolicy>): ExportPolicy {
+  return {
+    timeout: policy.timeout,
+    settleTimeout: policy.settleTimeout,
+    retries: policy.retries,
+    retryDelay: policy.retryDelay,
+    pollInterval: policy.pollInterval,
+    settle: policy.settle,
+    verify: policy.verify,
+  };
 }
 
 export const STRATEGIES: LocatorStrategy[] = ['accessibility id', 'id', '-android uiautomator', '-ios predicate string', '-ios class chain', 'xpath'];

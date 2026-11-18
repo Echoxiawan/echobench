@@ -9,6 +9,8 @@ npm run appium
 
 > 三种脚本都会把当前设备能力、输入内容和断言明文写入文件；密码、令牌等敏感信息请在提交代码前改为环境变量或密钥管理。
 
+导出内容是确定性的：每个目标只保留当前选定的定位器（没有定位器时保留坐标），不会写入候选定位器、元素范围、校验时间或风险提示，也不会启用候选降级和坐标兜底。断言会显式写出等待条件和匹配方式，因此建议先在 EchoBench 中回放、调试并通过，再导出脚本或 YAML。
+
 ## JavaScript（WebdriverIO）
 
 导出的 `app-steps.js` 使用 WebdriverIO，但项目本身运行时不需要 WebdriverIO，所以没有将其加入依赖。在独立目录执行：
@@ -38,7 +40,7 @@ pip install Appium-Python-Client
 python3 app-steps.py
 ```
 
-Python 脚本包含能力配置、等待/重试、候选降级、坐标兜底、手势和断言，并会在结束时关闭会话。
+Python 脚本包含能力配置、等待/重试、手势和显式断言，并会在结束时关闭会话。
 
 ## Java（Appium Java Client）
 
@@ -57,7 +59,7 @@ Python 脚本包含能力配置、等待/重试、候选降级、坐标兜底、
 </dependency>
 ```
 
-编译后运行 `AppSteps` 主类。Java 脚本使用 `AppiumBy` 和 W3C 手势，包含与 YAML 相同的等待、候选降级和断言逻辑。
+编译后运行 `AppSteps` 主类。Java 脚本使用 `AppiumBy` 和 W3C 手势，包含与 YAML 相同的等待和显式断言逻辑。
 
 ## 选择哪种格式
 

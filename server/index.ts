@@ -14,7 +14,7 @@ import { flattenElementTree } from './inspector.js';
 import { generateJava } from '../electron/export-java.js';
 import { generatePython } from '../electron/export-python.js';
 import { runReplay, type ReplayAdapter } from '../electron/replay.js';
-import { generateJavaScript, parseScript, stringifyScript, validateScript } from '../electron/script.js';
+import { generateJavaScript, parseScript, stringifyExportScript, validateScript } from '../electron/script.js';
 import { runDoctor } from './doctor.js';
 import { applySimulatorStates, detectIosPlatformVersion, parseAdbDevices, parseSimctlStates, parseXctraceDevices } from './devices.js';
 import { detectIosSigning } from './ios-signing.js';
@@ -430,7 +430,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, pat
     if (recordingActive && snapshot.target) snapshot.target = await verifyRecordedTarget(snapshot.target);
     return sendJson(response, 200, snapshot);
   }
-  if (method === 'POST' && path === '/api/script/yaml') return send(response, 200, stringifyScript(validateScript(await readBody(request))), 'application/yaml; charset=utf-8');
+  if (method === 'POST' && path === '/api/script/yaml') return send(response, 200, stringifyExportScript(validateScript(await readBody(request))), 'application/yaml; charset=utf-8');
   if (method === 'POST' && path === '/api/script/parse') return sendJson(response, 200, parseScript((await readBody<{ content: string }>(request)).content));
   if (method === 'POST' && path === '/api/script/javascript') return send(response, 200, generateJavaScript(validateScript(await readBody(request))), 'text/javascript; charset=utf-8');
   if (method === 'POST' && path === '/api/script/python') return send(response, 200, generatePython(validateScript(await readBody(request))), 'text/x-python; charset=utf-8');

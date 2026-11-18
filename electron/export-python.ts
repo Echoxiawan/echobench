@@ -12,7 +12,6 @@ from appium import webdriver
 from appium.options.android import UiAutomator2Options
 from appium.options.ios import XCUITestOptions
 from appium.webdriver.common.appiumby import AppiumBy
-from selenium.common.exceptions import NoSuchElementException
 
 PLAN = json.loads(${plan})
 PLATFORM = PLAN["platform"]
@@ -49,43 +48,25 @@ def element_ready(element):
         return False
 
 
-def locator_text(locator):
-    return "%s: %s" % (locator["strategy"], locator["value"])
-
-
 def wait_target(driver, step, policy):
-    locators = step.get("locators") or []
-    if not locators:
+    locator = step.get("locator")
+    if not locator:
         return None
     deadline = time.time() + policy["timeout"] / 1000
     last_error = "控件未出现"
     while time.time() < deadline:
-        for locator in locators:
-            try:
-                if not policy["locatorFallback"]:
-                    try:
-                        element = driver.find_element(STRATEGY[locator["strategy"]], locator["value"])
-                    except NoSuchElementException:
-                        continue
-                    if element_ready(element):
-                        return element
-                    last_error = "控件尚未就绪"
-                    continue
-                elements = find_all(driver, locator)
-                if len(elements) > 1:
-                    last_error = "定位器匹配 %d 个元素，不使用该定位器" % len(elements)
-                    continue
-                if len(elements) == 1:
-                    if element_ready(elements[0]):
-                        return elements[0]
-                    last_error = "控件尚未就绪"
-            except Exception as exc:
-                last_error = str(exc)
+        try:
+            elements = find_all(driver, locator)
+            if len(elements) > 1:
+                last_error = "定位器匹配 %d 个元素" % len(elements)
+            elif len(elements) == 1:
+                if element_ready(elements[0]):
+                    return elements[0]
+                last_error = "控件尚未就绪"
+        except Exception as exc:
+            last_error = str(exc)
         sleep_ms(policy["pollInterval"])
-    if step["action"] == "tap" and step.get("coordinate") and policy["coordinateFallback"]:
-        print("定位器未就绪，使用坐标兜底：%s" % step["description"])
-        return None
-    raise RuntimeError("等待控件就绪超时：%s；已尝试 %d 个定位器；%s" % (step["description"], len(locators), last_error))
+    raise RuntimeError("等待控件就绪超时：%s；%s" % (step["description"], last_error))
 
 
 def page_stable(driver, policy, timeout):
@@ -135,26 +116,20 @@ def wait_condition(driver, step, policy):
         if not page_stable(driver, policy, step["timeout"]):
             raise RuntimeError("页面持续变化，等待稳定超时（%dms）" % step["timeout"])
         return
-    locators = step.get("locators") or []
-    if not locators:
+    locator = step.get("locator")
+    if not locator:
         raise RuntimeError("等待步骤需要控件定位器")
     deadline = time.time() + step["timeout"] / 1000
     last_error = "控件未出现"
     while time.time() < deadline:
-        for locator in locators:
-            elements = find_all(driver, locator)
-            if condition == "hidden":
-                if not elements:
-                    return
-                if not elements[0].is_displayed():
-                    return
-                last_error = "控件仍然可见"
-                continue
-            if len(elements) > 1:
-                last_error = "定位器匹配 %d 个元素，不使用该定位器" % len(elements)
-                continue
-            if not elements:
-                continue
+        elements = find_all(driver, locator)
+        if condition == "hidden":
+            if not elements or not elements[0].is_displayed():
+                return
+            last_error = "控件仍然可见"
+        elif len(elements) > 1:
+            last_error = "定位器匹配 %d 个元素" % len(elements)
+        elif elements:
             element = elements[0]
             if condition == "exists":
                 return
@@ -307,8 +282,8 @@ def main():
             for attempt in range(policy["retries"] + 1):
                 dispatched = False
                 try:
-                    element = wait_target(driver, step, policy) if step.get("locators") else None
-                    if not step.get("locators") and policy["settle"] and page_dirty:
+                    element = wait_target(driver, step, policy) if step.get("locator") else None
+                    if not step.get("locator") and policy["settle"] and page_dirty:
                         if not page_stable(driver, policy, policy["settleTimeout"]):
                             print("页面持续变化，继续执行")
                         page_dirty = False
@@ -319,7 +294,7 @@ def main():
                         else:
                             coordinate = step.get("coordinate")
                             if not coordinate:
-                                raise RuntimeError("步骤既没有有效定位器，也没有坐标兜底")
+                                raise RuntimeError("步骤既没有定位器，也没有坐标")
                             size = driver.get_window_size()
                             tap_point(driver, int(size["width"] * coordinate["xRatio"]), int(size["height"] * coordinate["yRatio"]))
                         dispatched = True

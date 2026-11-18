@@ -96,6 +96,8 @@ If the script contains `appPackage` or `bundleId`, `requireApp` checks the foreg
 
 `target.candidates` is optional. Older scripts without candidates still load and replay.
 
+Candidate locators are only for inspection, verification, and debugging inside the editor. Exporting YAML or an automation script produces a deterministic snapshot: only the selected `locator` is kept (or `coordinate` when no locator exists). `candidates`, `bounds`, `verifiedAt`, `warning`, candidate fallback, and coordinate fallback are removed. `wait` steps get an explicit `condition`, and text assertions get an explicit `match`.
+
 ```yaml
 target:
   locator:
