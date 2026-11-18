@@ -1,6 +1,6 @@
 {
   "name": "echobench",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "EchoBench — local-first Android/iOS mobile test studio with recording, replay, multi-device sync and AI CSV export",
   "author": "EchoBench contributors",
